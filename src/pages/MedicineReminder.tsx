@@ -53,10 +53,7 @@ function getTimeStatus(med: Medicine, time: string): 'taken' | 'missed' | 'upcom
   return 'upcoming';
 }
 
-function nowHHMM() {
-  const d = new Date();
-  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-}
+
 
 /* ─── Default form ───────────────────────────────────── */
 const defaultForm = () => ({
@@ -292,7 +289,6 @@ function MedicineCard({
   onMissed: (time: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const now = nowHHMM();
 
   const allTaken   = med.times.length > 0 && med.times.every(t => med.todayStatus?.taken.includes(t));
   const hasMissed  = (med.todayStatus?.missed.length || 0) > 0;
