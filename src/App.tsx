@@ -1,6 +1,10 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
 import RequireAuth from './components/RequireAuth';
+import RequireAdmin from './components/RequireAdmin';
+import RequireDoctor from './components/RequireDoctor';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import DoctorDashboard from './pages/doctor/DoctorDashboard';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -28,6 +32,12 @@ function App() {
             <Route path="/stress-tracker" element={<StressTracker />} />
             <Route path="/health-reports" element={<HealthReports />} />
             <Route path="/profile" element={<Profile />} />
+          </Route>
+          <Route element={<RequireAdmin />}>
+            <Route path="/admin/*" element={<AdminDashboard />} />
+          </Route>
+          <Route element={<RequireDoctor />}>
+            <Route path="/doctor/*" element={<DoctorDashboard />} />
           </Route>
         </Route>
       </Routes>

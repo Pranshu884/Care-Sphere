@@ -9,10 +9,12 @@ export function signToken(user) {
   // Keep payload small; client can fetch profile for full details.
   return jwt.sign(
     {
-      sub: String(user._id),
+      userId: String(user._id),
       email: user.email,
       name: user.name,
       emailVerified: user.emailVerified,
+      role: user.role,
+      doctorProfileId: user.doctorProfileId ? String(user.doctorProfileId) : undefined,
     },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRES_IN }

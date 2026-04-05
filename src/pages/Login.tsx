@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Activity, Mail, Phone, ShieldCheck } from 'lucide-react';
+import { Activity, Mail, ShieldCheck } from 'lucide-react';
 import {
-  normalizePhone,
   requestLoginOtp,
   resendOtp,
   setSessionUser,
@@ -12,7 +11,7 @@ import {
 
 export default function Login() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ email: '', phone: '' });
+  const [form, setForm] = useState({ email: '' });
   const [otpStage, setOtpStage] = useState<'request' | 'verify'>('request');
   const [otpInput, setOtpInput] = useState('');
   const [expiresAt, setExpiresAt] = useState<number | null>(null);
@@ -24,7 +23,7 @@ export default function Login() {
   const [info, setInfo] = useState('');
   const cooldownIntervalRef = useRef<number | null>(null);
 
-  const canVerify = useMemo(() => otpInput.trim().length === 6, [otpInput]);
+  const canVerify = useMemo(() => otpInput.trim().length >= 4 && otpInput.trim().length <= 6, [otpInput]);
 
   useEffect(() => {
     return () => {
@@ -70,18 +69,8 @@ export default function Login() {
         setError('Please enter your email.');
         return;
       }
-      if (!form.phone.trim()) {
-        setError('Please enter your phone number.');
-        return;
-      }
 
-      const normalizedPhone = normalizePhone(form.phone);
-      if (normalizedPhone.length < 8) {
-        setError('Please enter a valid phone number.');
-        return;
-      }
-
-      const result = await requestLoginOtp({ email: form.email, phone: normalizedPhone });
+      const result = await requestLoginOtp({ email: form.email });
       if (!result.ok) {
         setError(result.reason);
         return;
@@ -90,7 +79,7 @@ export default function Login() {
       setExpiresAt(result.expiresAt);
       setOtpStage('verify');
       setOtpInput('');
-      setInfo('OTP sent to your email. Please enter it to sign in.');
+      setInfo('OTP sent to your email.');
       startCooldown(result.cooldownSeconds);
     } catch {
       setError('Failed to send OTP. Please try again.');
@@ -106,8 +95,8 @@ export default function Login() {
     setVerifyLoading(true);
 
     try {
-      if (otpInput.trim().length !== 6) {
-        setError('Please enter the 6-digit OTP.');
+      if (otpInput.trim().length < 4) {
+        setError('Please enter a valid OTP.');
         return;
       }
 
@@ -117,9 +106,26 @@ export default function Login() {
         return;
       }
 
+      localStorage.removeItem('caresphere_token');
+      localStorage.removeItem('caresphere_user');
+      localStorage.removeItem('role');
+
       setToken(result.token);
       setSessionUser(result.user);
-      navigate('/dashboard');
+      
+      const role = result.role;
+      localStorage.setItem("token", result.token);
+      localStorage.setItem("role", role);
+      
+      console.log("Frontend Role:", role);
+
+      if (role === 'admin') {
+        navigate('/admin/dashboard');
+      } else if (role === 'doctor') {
+        navigate('/doctor/dashboard');
+      } else {
+        navigate('/dashboard');
+      }
     } catch {
       setError('OTP verification failed. Please try again.');
     } finally {
@@ -128,105 +134,88 @@ export default function Login() {
   };
 
   return (
-    <div className="relative min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-12 bg-slate-50 overflow-hidden">
+    <div className="relative min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-12 bg-background overflow-hidden relative z-0">
       <div
         aria-hidden
-        className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22640%22 height=%22640%22 viewBox=%220 0 640 640%22%3E%3Cg fill=%22none%22 stroke=%22%2314b8a6%22 stroke-opacity=%220.12%22 stroke-width=%222%22%3E%3Cpath d=%22M0 320h640%22/%3E%3Cpath d=%22M320 0v640%22/%3E%3Ccircle cx=%22320%22 cy=%22320%22 r=%22100%22/%3E%3C/g%3E%3C/svg%3E')] bg-cover opacity-60 pointer-events-none"
+        className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22640%22 height=%22640%22 viewBox=%220 0 640 640%22%3E%3Cg fill=%22none%22 stroke=%22%2300D4FF%22 stroke-opacity=%220.05%22 stroke-width=%222%22%3E%3Cpath d=%22M0 320h640%22/%3E%3Cpath d=%22M320 0v640%22/%3E%3Ccircle cx=%22320%22 cy=%22320%22 r=%22100%22/%3E%3C/g%3E%3C/svg%3E')] bg-cover opacity-60 pointer-events-none -z-10"
       />
 
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-md relative z-10">
         <div className="text-center mb-8">
-          <Link to="/" className="inline-flex items-center gap-2 text-teal-600 font-semibold">
+          <Link to="/" className="inline-flex items-center gap-2 text-primary font-semibold transition-transform hover:scale-105">
             <Activity className="w-8 h-8" />
-            <span className="text-xl">CareSphere</span>
+            <span className="text-xl tracking-tight">CareSphere</span>
           </Link>
         </div>
 
-        <div className="relative bg-white/95 backdrop-blur rounded-2xl shadow-soft p-8 border border-slate-100">
+        <div className="glass-panel p-8">
           <div className="flex items-center gap-3 mb-2">
-            <ShieldCheck className="w-6 h-6 text-teal-600" />
-            <h1 className="text-2xl font-bold text-slate-900">Sign in with OTP</h1>
+            <ShieldCheck className="w-6 h-6 text-primary drop-shadow-[0_0_15px_rgba(0,212,255,0.5)]" />
+            <h1 className="text-2xl font-bold text-white tracking-tight">Sign in securely</h1>
           </div>
-          <p className="mt-2 text-slate-600">
-            Enter your email and phone number to receive a one-time password.
+          <p className="mt-2 text-muted">
+            Enter your email to receive a secure one-time password.
           </p>
 
           {otpStage === 'request' ? (
             <form onSubmit={handleRequestOtp} className="mt-8 space-y-5">
               {error && (
-                <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm">
+                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
                   {error}
                 </div>
               )}
 
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-slate-700">Email</label>
+                <label htmlFor="email" className="block text-sm font-medium text-muted mb-1.5">Email</label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted/70" />
                   <input
                     id="email"
                     type="email"
                     required
                     value={form.email}
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    className="mt-1 block w-full pl-10 pr-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                    className="premium-input pl-11"
                     placeholder="you@example.com"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="phone" className="block text-sm font-medium text-slate-700">Phone number</label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                  <input
-                    id="phone"
-                    type="tel"
-                    required
-                    value={form.phone}
-                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                    className="mt-1 block w-full pl-10 pr-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-                    placeholder="Enter phone number"
                   />
                 </div>
               </div>
 
               <button
                 type="submit"
-                className="w-full py-3 bg-teal-600 text-white font-medium rounded-lg hover:bg-teal-700 transition-colors"
+                className="glow-button w-full py-3.5 mt-2"
                 disabled={requestOtpLoading}
               >
                 {requestOtpLoading ? 'Sending OTP...' : 'Send OTP'}
               </button>
 
-              {info && <div className="text-sm text-slate-600">{info}</div>}
+              {info && <div className="text-sm text-primary text-center">{info}</div>}
             </form>
           ) : (
             <form onSubmit={handleVerifyOtp} className="mt-8 space-y-5">
               {error && (
-                <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm">
+                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
                   {error}
                 </div>
               )}
               {info && (
-                <div className="p-3 rounded-lg bg-teal-50 text-teal-800 text-sm">
+                <div className="p-3 rounded-xl bg-[#00D4FF]/10 border border-[#00D4FF]/20 text-primary text-sm">
                   {info}
                 </div>
               )}
 
               <div className="space-y-2">
-                <div className="text-sm text-slate-600">
-                  Enter the 6-digit OTP sent to <span className="font-medium">{form.email}</span> and{' '}
-                  <span className="font-medium">{form.phone}</span>.
+                <div className="text-sm text-muted">
+                  Enter the OTP sent to <span className="font-medium text-white">{form.email}</span>
                 </div>
 
                 {expiresAt && (
-                  <div className="text-xs text-slate-500">OTP is valid for 5 minutes</div>
+                  <div className="text-xs text-muted/60">OTP is valid for 5 minutes</div>
                 )}
               </div>
 
               <div>
-                <label htmlFor="otp" className="block text-sm font-medium text-slate-700">OTP</label>
+                <label htmlFor="otp" className="block text-sm font-medium text-muted mb-1.5">Verification Code</label>
                 <input
                   id="otp"
                   inputMode="numeric"
@@ -235,20 +224,20 @@ export default function Login() {
                   maxLength={6}
                   value={otpInput}
                   onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  className="mt-1 block w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 font-mono tracking-widest"
+                  className="premium-input font-mono tracking-widest text-center text-xl py-3"
                   placeholder="123456"
                 />
               </div>
 
               <button
                 type="submit"
-                disabled={!canVerify}
-                className="w-full py-3 bg-teal-600 text-white font-medium rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canVerify || verifyLoading}
+                className="glow-button w-full py-3.5 mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {verifyLoading ? 'Verifying...' : 'Verify OTP & Sign in'}
               </button>
 
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between pt-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -257,9 +246,9 @@ export default function Login() {
                     setExpiresAt(null);
                     clearCooldown();
                   }}
-                  className="text-sm text-slate-600 hover:text-teal-700 hover:underline"
+                  className="text-sm text-muted hover:text-white transition-colors"
                 >
-                  Change email/phone
+                  Change email
                 </button>
 
                 <button
@@ -286,7 +275,7 @@ export default function Login() {
                     }
                   }}
                   disabled={resendDisabled || requestOtpLoading}
-                  className="text-sm text-teal-700 hover:underline font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="text-sm text-primary hover:text-white transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {resendDisabled && cooldownSecondsLeft !== null ? `Resend in ${cooldownSecondsLeft}s` : 'Resend OTP'}
                 </button>
@@ -294,9 +283,9 @@ export default function Login() {
             </form>
           )}
 
-          <p className="mt-6 text-center text-slate-600 text-sm">
+          <p className="mt-8 text-center text-muted text-sm border-t border-white/10 pt-6">
             Don&apos;t have an account?{' '}
-            <Link to="/register" className="text-teal-600 font-medium hover:underline">
+            <Link to="/register" className="text-primary font-medium hover:text-white transition-colors">
               Register
             </Link>
           </p>

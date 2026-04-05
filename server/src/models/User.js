@@ -12,6 +12,11 @@ const UserSchema = new mongoose.Schema(
     gender: { type: String, required: true, enum: ['male', 'female', 'other', 'prefer-not'] },
 
     emailVerified: { type: Boolean, default: false },
+
+    role: { type: String, enum: ['user', 'admin', 'doctor'], default: 'user' },
+    doctorProfileId: { type: mongoose.Schema.Types.ObjectId, ref: 'Doctor' },
+    isBlocked: { type: Boolean, default: false },
+    isActive: { type: Boolean, default: true },
   },
   { timestamps: true }
 );

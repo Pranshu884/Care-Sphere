@@ -2,10 +2,12 @@ export type CareUser = {
   id: string;
   name: string;
   email: string;
-  phone: string;
   age: number;
   gender: 'male' | 'female' | 'other' | 'prefer-not';
   emailVerified: boolean;
+  role?: 'user' | 'admin' | 'doctor';
+  isBlocked?: boolean;
+  isActive?: boolean;
   createdAt?: string | Date;
   updatedAt?: string | Date;
 };
@@ -19,11 +21,6 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 function normalizeEmail(email: string) {
   return String(email || '').trim().toLowerCase();
-}
-
-export function normalizePhone(phone: string) {
-  // Keep digits only to avoid formatting mismatches.
-  return phone.replace(/\D/g, '');
 }
 
 function normalizeApiBase(url: string) {
@@ -94,7 +91,6 @@ export function clearSessionUser() {
 export async function requestRegisterOtp(payload: {
   name: string;
   email: string;
-  phone: string;
   age: number;
   gender: CareUser['gender'];
   password: string;
@@ -102,7 +98,6 @@ export async function requestRegisterOtp(payload: {
   const result = await postJson('/api/auth/register', {
     name: payload.name,
     email: normalizeEmail(payload.email),
-    phone: normalizePhone(payload.phone),
     age: payload.age,
     gender: payload.gender,
     password: payload.password,
@@ -140,11 +135,9 @@ export async function verifyRegisterEmailOtp(payload: { email: string; otp: stri
   };
 }
 
-export async function requestLoginOtp(payload: { email: string; phone: string }) {
+export async function requestLoginOtp(payload: { email: string }) {
   const result = await postJson('/api/auth/login', {
     email: normalizeEmail(payload.email),
-    // backend doesn't require phone, but keeping it allows future extension.
-    phone: normalizePhone(payload.phone),
   });
   if (result.ok && result.data?.success) {
     return {
@@ -169,6 +162,7 @@ export async function verifyLoginOtp(payload: { email: string; otp: string }) {
     return {
       ok: true as const,
       token: String(result.data.token),
+      role: String(result.data.role || result.data.user?.role || 'patient').toLowerCase(),
       user: result.data.user as CareUser,
     };
   }
@@ -206,7 +200,7 @@ export async function getMe() {
   return { ok: false as const, code: String(result.data?.code || 'me_failed'), reason: String(result.data?.message || 'Unauthorized') };
 }
 
-export async function updateMe(payload: { name: string; email: string; phone: string }) {
+export async function updateMe(payload: { name: string; email: string }) {
   const base = normalizeApiBase(API_BASE_URL);
   const token = getToken();
   if (!token) return { ok: false as const, code: 'no_token', reason: 'Not authenticated.' };
@@ -216,7 +210,6 @@ export async function updateMe(payload: { name: string; email: string; phone: st
     body: JSON.stringify({
       name: payload.name,
       email: payload.email,
-      phone: normalizePhone(payload.phone),
     }),
   });
   const data = await res.json().catch(() => ({}));

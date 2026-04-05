@@ -30,6 +30,10 @@ function toPublicUser(u) {
     age: u.age,
     gender: u.gender,
     emailVerified: u.emailVerified,
+    role: u.role || 'user',
+    doctorProfileId: u.doctorProfileId || undefined,
+    isBlocked: u.isBlocked || false,
+    isActive: u.isActive !== false,
     createdAt: u.createdAt,
     updatedAt: u.updatedAt,
   };
@@ -56,9 +60,35 @@ async function registerUserAndSendOtp({ name, email, phone, age, gender, passwor
     return { status: 400, body: { success: false, code: 'invalid_gender', message: 'Invalid gender.' } };
   }
 
-  const existing = await User.findOne({ email: normalizedEmail }).lean();
+  const existing = await User.findOne({ email: normalizedEmail });
   if (existing) {
-    return { status: 409, body: { success: false, code: 'email_already_exists', message: 'An account with this email already exists.' } };
+    if (existing.emailVerified) {
+      return { status: 409, body: { success: false, code: 'email_already_exists', message: 'An account with this email already exists.' } };
+    }
+    
+    // User exists but is unverified. Update details and allow re-registration.
+    existing.name = String(name).trim();
+    if (phone) existing.phone = String(phone);
+    existing.passwordHash = await bcrypt.hash(String(password), getSaltRounds());
+    existing.age = normalizedAge;
+    existing.gender = gender;
+    await existing.save();
+
+    const otpResult = await otpService.sendOtp({ email: normalizedEmail, purpose: 'register', resend: false });
+    if (otpResult.status !== 200) {
+      return otpResult;
+    }
+
+    return {
+      status: 200,
+      body: {
+        success: true,
+        code: 'registration_created',
+        message: 'Account updated. Verification OTP sent to your email.',
+        expiresAt: otpResult.body.expiresAt,
+        cooldownSeconds: otpResult.body.cooldownSeconds,
+      },
+    };
   }
 
   const passwordHash = await bcrypt.hash(String(password), getSaltRounds());
@@ -138,6 +168,9 @@ async function requestLoginOtp({ email }) {
   if (!existing) {
     return { status: 404, body: { success: false, code: 'account_not_found', message: 'No account found for this email.' } };
   }
+  if (!existing.emailVerified) {
+    return { status: 403, body: { success: false, code: 'email_not_verified', message: 'Please verify your email via the registration page first.' } };
+  }
 
   const otpResult = await otpService.sendOtp({ email: normalizedEmail, purpose: 'login', resend: false });
   return otpResult.status === 200
@@ -165,6 +198,11 @@ async function verifyLoginOtpAndIssueToken({ email, otp }) {
   if (!user.emailVerified) {
     return { status: 403, body: { success: false, code: 'email_not_verified', message: 'Please verify your email before logging in.' } };
   }
+  if (user.isBlocked) {
+    return { status: 403, body: { success: false, code: 'account_blocked', message: 'Your account has been blocked by an administrator.' } };
+  }
+
+  console.log("LOGIN ROLE:", user.role);
 
   const token = signToken(user);
   return {
@@ -174,6 +212,7 @@ async function verifyLoginOtpAndIssueToken({ email, otp }) {
       code: 'login_success',
       message: 'Logged in successfully.',
       token,
+      role: user.role,
       user: toPublicUser(user),
     },
   };

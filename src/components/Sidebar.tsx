@@ -15,21 +15,21 @@ export default function Sidebar() {
   const location = useLocation();
 
   return (
-    <aside className="w-64 min-h-[calc(100vh-4rem)] bg-white border-r border-slate-200 hidden lg:block flex-shrink-0">
-      <nav className="p-4 space-y-1 sticky top-16">
+    <aside className="w-56 min-h-[calc(100vh-4rem)] bg-white/[0.02] border-r border-white/10 hidden lg:block flex-shrink-0">
+      <nav className="p-3 space-y-1 sticky top-16">
         {links.map(({ to, label, icon: Icon }) => {
           const isActive = location.pathname === to;
           return (
             <Link
               key={to}
               to={to}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
                 isActive
-                  ? 'bg-teal-50 text-teal-700'
-                  : 'text-slate-600 hover:bg-slate-50 hover:text-teal-600'
+                  ? 'bg-[#00D4FF]/10 text-[#00D4FF] border border-[#00D4FF]/20'
+                  : 'text-muted hover:bg-white/5 hover:text-white border border-transparent'
               }`}
             >
-              <Icon className="w-5 h-5" />
+              <Icon className="w-4 h-4" />
               {label}
             </Link>
           );

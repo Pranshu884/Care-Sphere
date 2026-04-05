@@ -15,4 +15,3 @@ export default function authMiddleware(req, res, next) {
     return res.status(401).json({ success: false, code: 'unauthorized', message: 'Invalid or expired token.' });
   }
 }
-

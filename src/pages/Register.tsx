@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Activity, Mail, Phone, ShieldCheck } from 'lucide-react';
+import { Activity, Mail, ShieldCheck } from 'lucide-react';
 import {
   requestRegisterOtp,
   resendOtp,
-  normalizePhone,
   setSessionUser,
   setToken,
   verifyRegisterEmailOtp,
@@ -15,7 +14,6 @@ export default function Register() {
   const [form, setForm] = useState({
     name: '',
     email: '',
-    phone: '',
     age: '',
     gender: 'male' as 'male' | 'female' | 'other' | 'prefer-not',
     password: '',
@@ -32,7 +30,7 @@ export default function Register() {
   const [info, setInfo] = useState('');
   const cooldownIntervalRef = useRef<number | null>(null);
 
-  const canVerify = useMemo(() => otpInput.trim().length === 6, [otpInput]);
+  const canVerify = useMemo(() => otpInput.trim().length >= 4 && otpInput.trim().length <= 6, [otpInput]);
 
   useEffect(() => {
     return () => {
@@ -80,16 +78,6 @@ export default function Register() {
         setError('Please enter your email.');
         return;
       }
-      if (!form.phone.trim()) {
-        setError('Please enter your phone number.');
-        return;
-      }
-
-      const normalizedPhone = normalizePhone(form.phone);
-      if (normalizedPhone.length < 8) {
-        setError('Please enter a valid phone number.');
-        return;
-      }
 
       if (!form.age.trim()) {
         setError('Please enter your age.');
@@ -117,7 +105,6 @@ export default function Register() {
       const result = await requestRegisterOtp({
         name: form.name,
         email: form.email,
-        phone: normalizedPhone,
         age: ageNum,
         gender: form.gender,
         password: form.password,
@@ -146,8 +133,8 @@ export default function Register() {
     setVerifyLoading(true);
 
     try {
-      if (otpInput.trim().length !== 6) {
-        setError('Please enter the 6-digit OTP.');
+      if (otpInput.trim().length < 4) {
+        setError('Please enter a valid OTP.');
         return;
       }
 
@@ -168,83 +155,67 @@ export default function Register() {
   };
 
   return (
-    <div className="relative min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-12 bg-slate-50 overflow-hidden">
+    <div className="relative min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-12 bg-background overflow-hidden relative z-0">
       <div
         aria-hidden
-        className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22640%22 height=%22640%22 viewBox=%220 0 640 640%22%3E%3Cg fill=%22none%22 stroke=%22%2314b8a6%22 stroke-opacity=%220.12%22 stroke-width=%222%22%3E%3Cpath d=%22M0 320h640%22/%3E%3Cpath d=%22M320 0v640%22/%3E%3Ccircle cx=%22320%22 cy=%22320%22 r=%22100%22/%3E%3C/g%3E%3C/svg%3E')] bg-cover opacity-60 pointer-events-none"
+        className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22640%22 height=%22640%22 viewBox=%220 0 640 640%22%3E%3Cg fill=%22none%22 stroke=%22%2300D4FF%22 stroke-opacity=%220.05%22 stroke-width=%222%22%3E%3Cpath d=%22M0 320h640%22/%3E%3Cpath d=%22M320 0v640%22/%3E%3Ccircle cx=%22320%22 cy=%22320%22 r=%22100%22/%3E%3C/g%3E%3C/svg%3E')] bg-cover opacity-60 pointer-events-none -z-10"
       />
 
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-md relative z-10">
         <div className="text-center mb-8">
-          <Link to="/" className="inline-flex items-center gap-2 text-teal-600 font-semibold">
+          <Link to="/" className="inline-flex items-center gap-2 text-primary font-semibold transition-transform hover:scale-105">
             <Activity className="w-8 h-8" />
-            <span className="text-xl">CareSphere</span>
+            <span className="text-xl tracking-tight">CareSphere</span>
           </Link>
         </div>
 
-        <div className="relative bg-white/95 backdrop-blur rounded-2xl shadow-soft p-8 border border-slate-100">
+        <div className="glass-panel p-8">
           <div className="flex items-center gap-3 mb-2">
-            <ShieldCheck className="w-6 h-6 text-teal-600" />
-            <h1 className="text-2xl font-bold text-slate-900">Create account with OTP</h1>
+            <ShieldCheck className="w-6 h-6 text-primary drop-shadow-[0_0_15px_rgba(0,212,255,0.5)]" />
+            <h1 className="text-2xl font-bold text-white tracking-tight">Create an account</h1>
           </div>
-          <p className="mt-2 text-slate-600">Register using your email and phone number.</p>
+          <p className="mt-2 text-muted">Register securely using your email address.</p>
 
           {otpStage === 'request' ? (
             <form onSubmit={handleRequestOtp} className="mt-8 space-y-5">
               {error && (
-                <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm">
+                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
                   {error}
                 </div>
               )}
 
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-slate-700">Email</label>
+                <label htmlFor="email" className="block text-sm font-medium text-muted mb-1.5">Email</label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted/70" />
                   <input
                     id="email"
                     type="email"
                     required
                     value={form.email}
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    className="mt-1 block w-full pl-10 pr-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                    className="premium-input pl-11"
                     placeholder="you@example.com"
                   />
                 </div>
               </div>
 
               <div>
-                <label htmlFor="name" className="block text-sm font-medium text-slate-700">Name</label>
+                <label htmlFor="name" className="block text-sm font-medium text-muted mb-1.5">Name</label>
                 <input
                   id="name"
                   type="text"
                   required
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="mt-1 block w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                  className="premium-input"
                   placeholder="Your full name"
                 />
               </div>
 
-              <div>
-                <label htmlFor="phone" className="block text-sm font-medium text-slate-700">Phone number</label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                  <input
-                    id="phone"
-                    type="tel"
-                    required
-                    value={form.phone}
-                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                    className="mt-1 block w-full pl-10 pr-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-                    placeholder="Enter phone number"
-                  />
-                </div>
-              </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="age" className="block text-sm font-medium text-slate-700">Age</label>
+                  <label htmlFor="age" className="block text-sm font-medium text-muted mb-1.5">Age</label>
                   <input
                     id="age"
                     type="number"
@@ -253,18 +224,18 @@ export default function Register() {
                     required
                     value={form.age}
                     onChange={(e) => setForm({ ...form, age: e.target.value })}
-                    className="mt-1 block w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                    className="premium-input"
                     placeholder="Age"
                   />
                 </div>
 
                 <div>
-                  <label htmlFor="gender" className="block text-sm font-medium text-slate-700">Gender</label>
+                  <label htmlFor="gender" className="block text-sm font-medium text-muted mb-1.5">Gender</label>
                   <select
                     id="gender"
                     value={form.gender}
                     onChange={(e) => setForm({ ...form, gender: e.target.value as typeof form.gender })}
-                    className="mt-1 block w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                    className="premium-input [&>option]:text-slate-900"
                   >
                     <option value="male">Male</option>
                     <option value="female">Female</option>
@@ -275,66 +246,66 @@ export default function Register() {
               </div>
 
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-slate-700">Password</label>
+                <label htmlFor="password" className="block text-sm font-medium text-muted mb-1.5">Password</label>
                 <input
                   id="password"
                   type="password"
                   required
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  className="mt-1 block w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                  className="premium-input"
                   placeholder="At least 6 characters"
                 />
               </div>
 
               <div>
-                <label htmlFor="confirmPassword" className="block text-sm font-medium text-slate-700">Confirm password</label>
+                <label htmlFor="confirmPassword" className="block text-sm font-medium text-muted mb-1.5">Confirm password</label>
                 <input
                   id="confirmPassword"
                   type="password"
                   required
                   value={form.confirmPassword}
                   onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
-                  className="mt-1 block w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                  className="premium-input"
+                  placeholder="Match password"
                 />
               </div>
 
               <button
                 type="submit"
-                className="w-full py-3 bg-teal-600 text-white font-medium rounded-lg hover:bg-teal-700 transition-colors"
+                className="glow-button w-full py-3.5 mt-2 flex justify-center items-center"
                 disabled={requestOtpLoading}
               >
                 {requestOtpLoading ? 'Sending OTP...' : 'Send OTP'}
               </button>
 
-              {info && <div className="text-sm text-slate-600">{info}</div>}
+              {info && <div className="text-sm text-primary text-center">{info}</div>}
             </form>
           ) : (
             <form onSubmit={handleVerifyOtp} className="mt-8 space-y-5">
               {error && (
-                <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm">
+                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
                   {error}
                 </div>
               )}
               {info && (
-                <div className="p-3 rounded-lg bg-teal-50 text-teal-800 text-sm">
+                <div className="p-3 rounded-xl bg-[#00D4FF]/10 border border-[#00D4FF]/20 text-primary text-sm">
                   {info}
                 </div>
               )}
 
               <div className="space-y-2">
-                <div className="text-sm text-slate-600">
-                  Enter the 6-digit OTP sent to <span className="font-medium">{form.email}</span> and{' '}
-                  <span className="font-medium">{form.phone}</span>.
+                <div className="text-sm text-muted">
+                  Enter the OTP sent to <span className="font-medium text-white">{form.email}</span>
                 </div>
 
                 {expiresAt && (
-                  <div className="text-xs text-slate-500">OTP is valid for 5 minutes</div>
+                  <div className="text-xs text-muted/60">OTP is valid for 5 minutes</div>
                 )}
               </div>
 
               <div>
-                <label htmlFor="otp" className="block text-sm font-medium text-slate-700">OTP</label>
+                <label htmlFor="otp" className="block text-sm font-medium text-muted mb-1.5">Verification Code</label>
                 <input
                   id="otp"
                   inputMode="numeric"
@@ -343,20 +314,20 @@ export default function Register() {
                   maxLength={6}
                   value={otpInput}
                   onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  className="mt-1 block w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 font-mono tracking-widest"
+                  className="premium-input font-mono tracking-widest text-center text-xl py-3"
                   placeholder="123456"
                 />
               </div>
 
               <button
                 type="submit"
-                disabled={!canVerify}
-                className="w-full py-3 bg-teal-600 text-white font-medium rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canVerify || verifyLoading}
+                className="glow-button w-full py-3.5 mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {verifyLoading ? 'Verifying...' : 'Verify OTP & Create account'}
               </button>
 
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between pt-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -365,9 +336,9 @@ export default function Register() {
                     setExpiresAt(null);
                     clearCooldown();
                   }}
-                  className="text-sm text-slate-600 hover:text-teal-700 hover:underline"
+                  className="text-sm text-muted hover:text-white transition-colors"
                 >
-                  Change email/phone
+                  Change email
                 </button>
 
                 <button
@@ -394,7 +365,7 @@ export default function Register() {
                     }
                   }}
                   disabled={resendDisabled || requestOtpLoading}
-                  className="text-sm text-teal-700 hover:underline font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="text-sm text-primary hover:text-white transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {resendDisabled && cooldownSecondsLeft !== null ? `Resend in ${cooldownSecondsLeft}s` : 'Resend OTP'}
                 </button>
@@ -402,9 +373,9 @@ export default function Register() {
             </form>
           )}
 
-          <p className="mt-6 text-center text-slate-600 text-sm">
+          <p className="mt-8 text-center text-muted text-sm border-t border-white/10 pt-6">
             Already have an account?{' '}
-            <Link to="/login" className="text-teal-600 font-medium hover:underline">
+            <Link to="/login" className="text-primary font-medium hover:text-white transition-colors">
               Login
             </Link>
           </p>

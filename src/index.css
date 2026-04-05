@@ -1,9 +1,44 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   body {
-    @apply bg-slate-50 text-slate-700 antialiased;
+    @apply bg-background text-text antialiased min-h-screen relative overflow-x-hidden;
+  }
+  
+  body::before {
+    content: '';
+    position: fixed;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background-image: radial-gradient(circle at 50% 10%, rgba(0, 212, 255, 0.05) 0%, transparent 40%),
+                      radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.05) 0%, transparent 40%);
+    pointer-events: none;
+    z-index: -1;
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply bg-white/5 backdrop-blur-[10px] border border-white/10 rounded-2xl shadow-[0_4px_30px_rgba(0,0,0,0.1)] transition-all duration-300;
+  }
+  .glass-panel:hover {
+    @apply transform scale-[1.03] shadow-[0_0_15px_rgba(255,255,255,0.05)];
+  }
+  
+  .glow-button {
+    @apply rounded-[12px] bg-gradient-to-r from-[#00D4FF] to-blue-500 text-white font-medium px-6 py-2 transition-all duration-300 shadow-glow flex items-center justify-center gap-2;
+  }
+  .glow-button:hover {
+    @apply transform scale-105 shadow-glow-strong brightness-110;
+  }
+
+  .premium-input {
+    @apply w-full bg-white/5 border border-white/10 rounded-[12px] px-4 py-3 text-white placeholder-muted focus:outline-none focus:ring-2 focus:ring-[#00D4FF]/50 focus:border-[#00D4FF]/50 transition-all duration-300;
   }
 }

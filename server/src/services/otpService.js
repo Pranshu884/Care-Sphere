@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import db from '../utils/db.js';
-import { sendOtpEmail } from './resendEmail.js';
+import { sendOTPEmail } from './emailService.js';
 
 const PURPOSES = new Set(['register', 'login', 'forgot']);
 
@@ -65,12 +65,8 @@ function otpRowToChallenge(row) {
 }
 
 async function sendOtpEmailIfConfigured({ email, otp, purpose }) {
-  await sendOtpEmail({
-    toEmail: email,
-    otp,
-    purpose,
-    expiresInMinutes: Math.ceil((getOtpConfig().expirySeconds || 300) / 60)
-  });
+  const expiresInMinutes = Math.ceil((getOtpConfig().expirySeconds || 300) / 60);
+  await sendOTPEmail(email, otp, purpose, expiresInMinutes);
 }
 
 async function sendOtpInternal({ email, purpose, resend }) {
@@ -125,7 +121,20 @@ async function sendOtpInternal({ email, purpose, resend }) {
   });
 
   // Send email after storing OTP (to avoid mismatched flows on send failures).
-  await sendOtpEmailIfConfigured({ email: normalizedEmail, otp, purpose });
+  try {
+    await sendOtpEmailIfConfigured({ email: normalizedEmail, otp, purpose });
+  } catch (err) {
+    // If email sending fails, delete the OTP challenge so they can try again immediately without cooldown.
+    db.invalidateUnusedChallenges({ email: normalizedEmail, purpose, usedAt: tNow });
+    return {
+      status: 500,
+      body: {
+        success: false,
+        code: 'email_delivery_failed',
+        message: 'Failed to send the OTP email. Ensure your Resend domain is verified. Details: ' + err.message
+      }
+    };
+  }
 
   return {
     status: 200,

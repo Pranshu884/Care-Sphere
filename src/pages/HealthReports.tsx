@@ -1,91 +1,478 @@
-import { useState } from 'react';
-import { Download, Stethoscope, Calendar, Pill, Brain } from 'lucide-react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
+import { Upload, File as FileIcon, Loader2, Search, Filter, Plus, X, Eye, Trash2, Calendar, FileText, ImageIcon, Download, Stethoscope } from 'lucide-react';
+import { getToken } from '../lib/auth';
 
-const reportSections = [
-  {
-    icon: Stethoscope,
-    title: 'Symptom History',
-    desc: 'Overview of symptoms logged over time. Track patterns and recurrence.',
-  },
-  {
-    icon: Calendar,
-    title: 'Appointment History',
-    desc: 'Record of past and upcoming doctor visits.',
-  },
-  {
-    icon: Pill,
-    title: 'Medication Adherence',
-    desc: 'Summary of medication reminders and compliance.',
-  },
-  {
-    icon: Brain,
-    title: 'Stress Trends',
-    desc: 'Mood and stress level trends over time.',
-  },
-];
+interface ReportRecord {
+  _id: string;
+  title: string;
+  category: string;
+  fileUrl: string;
+  fileType: string;
+  doctorName?: string;
+  hospitalName?: string;
+  reportDate: string;
+  notes?: string;
+  createdAt: string;
+}
+
+const CATEGORIES = ['Blood Test', 'X-ray', 'MRI/CT Scan', 'Prescription', 'Medical Certificate', 'Other'];
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 export default function HealthReports() {
-  const [exporting, setExporting] = useState(false);
+  const [reports, setReports] = useState<ReportRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  // UI States
+  const [showUploadForm, setShowUploadForm] = useState(false);
+  const [previewReport, setPreviewReport] = useState<ReportRecord | null>(null);
+  
+  // Filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('All');
+  const [dateFilter, setDateFilter] = useState('All Time');
 
-  const handleExport = () => {
-    setExporting(true);
-    const data = {
-      generated: new Date().toISOString(),
-      symptomHistory: 'No symptom data recorded.',
-      appointmentHistory: 'No appointments recorded.',
-      medicationAdherence: 'No medication reminders set.',
-      stressTrends: 'No stress entries recorded.',
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `caresphere-report-${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setTimeout(() => setExporting(false), 500);
+  // Upload Form States
+  const [uploading, setUploading] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [formData, setFormData] = useState({
+    title: '',
+    category: 'Blood Test',
+    reportDate: new Date().toISOString().split('T')[0],
+    doctorName: '',
+    hospitalName: '',
+    notes: ''
+  });
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetchReports();
+  }, []);
+
+  const fetchReports = async () => {
+    try {
+      const token = getToken();
+      const res = await fetch(`${API_BASE_URL}/api/reports`, { 
+        headers: { Authorization: `Bearer ${token}` } 
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setReports(data.reports);
+      }
+    } catch (err) {
+      console.error('Failed to fetch reports', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  const handleUploadClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files?.[0];
+    if (selected) {
+      setFile(selected);
+      // Auto-fill title based on filename if empty
+      if (!formData.title) {
+        setFormData(prev => ({ ...prev, title: selected.name.split('.')[0] }));
+      }
+      setShowUploadForm(true);
+    }
+  };
+
+  const handleFormInputChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleUploadSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!file) return borderWarning();
+
+    setUploading(true);
+    const payload = new FormData();
+    payload.append('report', file);
+    payload.append('title', formData.title);
+    payload.append('category', formData.category);
+    payload.append('reportDate', formData.reportDate);
+    payload.append('doctorName', formData.doctorName);
+    payload.append('hospitalName', formData.hospitalName);
+    payload.append('notes', formData.notes);
+
+    try {
+      const token = getToken();
+      const res = await fetch(`${API_BASE_URL}/api/reports/upload`, { 
+        method: 'POST', 
+        headers: { Authorization: `Bearer ${token}` }, 
+        body: payload 
+      });
+      const data = await res.json();
+      
+      if (res.ok && data.success) {
+        setReports([data.report, ...reports]);
+        setShowUploadForm(false);
+        setFile(null);
+        setFormData({ title: '', category: 'Blood Test', reportDate: new Date().toISOString().split('T')[0], doctorName: '', hospitalName: '', notes: '' });
+      } else {
+        alert(data.message || 'Upload failed');
+      }
+    } catch (err) {
+      console.error('Upload error', err);
+      alert('Upload failed. Please check your network and try again.');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this report?')) return;
+    
+    try {
+      const token = getToken();
+      const res = await fetch(`${API_BASE_URL}/api/reports/${id}`, { 
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setReports(reports.filter(r => r._id !== id));
+      }
+    } catch (err) {
+      console.error('Failed to delete', err);
+    }
+  };
+
+  const borderWarning = () => alert("Please select a file first!");
+
+  // Filter and group reports
+  const { filteredReports, groupedTimeline } = useMemo(() => {
+    let filtered = reports.filter(r => {
+      // Search
+      const matchesSearch = r.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                            r.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            (r.doctorName && r.doctorName.toLowerCase().includes(searchQuery.toLowerCase()));
+      // Category Filter
+      const matchesCategory = categoryFilter === 'All' || r.category === categoryFilter;
+      
+      // Date filter
+      let matchesDate = true;
+      const reportDate = new Date(r.reportDate).getTime();
+      const now = Date.now();
+      if (dateFilter === 'Last 30 Days') matchesDate = (now - reportDate) <= 30 * 24 * 60 * 60 * 1000;
+      if (dateFilter === 'Last 6 Months') matchesDate = (now - reportDate) <= 180 * 24 * 60 * 60 * 1000;
+      if (dateFilter === 'This Year') matchesDate = new Date(r.reportDate).getFullYear() === new Date().getFullYear();
+
+      return matchesSearch && matchesCategory && matchesDate;
+    });
+
+    // Sort by reportDate DESC
+    filtered.sort((a, b) => new Date(b.reportDate).getTime() - new Date(a.reportDate).getTime());
+
+    // Group for timeline
+    const timeline: Record<string, ReportRecord[]> = {};
+    filtered.forEach(r => {
+      const date = new Date(r.reportDate);
+      const monthYear = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+      if (!timeline[monthYear]) timeline[monthYear] = [];
+      timeline[monthYear].push(r);
+    });
+
+    return { filteredReports: filtered, groupedTimeline: timeline };
+  }, [reports, searchQuery, categoryFilter, dateFilter]);
+
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-8">
+      {/* Header Area */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Health Reports</h1>
-          <p className="text-slate-600 mt-1">Comprehensive overview of your health data</p>
+          <h1 className="text-3xl font-bold text-white tracking-tight">Health Reports</h1>
+          <p className="text-muted mt-1">Manage, preview, and organize your clinical documents</p>
         </div>
-        <button
-          onClick={handleExport}
-          disabled={exporting}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 text-white font-medium rounded-lg hover:bg-teal-700 disabled:opacity-70"
-        >
-          <Download className="w-4 h-4" /> Export Report
-        </button>
+        
+        <div className="flex items-center gap-3">
+          <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf,image/*" />
+          <button
+            onClick={showUploadForm ? () => setShowUploadForm(false) : handleUploadClick}
+            className={`glow-button inline-flex items-center gap-2 px-6 py-2.5 transition-all ${showUploadForm ? 'bg-red-500/20 text-red-400 border-red-500/50 hover:bg-red-500/30 glow-none' : ''}`}
+          >
+            {showUploadForm ? <X className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+            {showUploadForm ? 'Cancel Upload' : 'Upload New Report'}
+          </button>
+        </div>
       </div>
 
-      <div className="space-y-6">
-        {reportSections.map(({ icon: Icon, title, desc }) => (
-          <div key={title} className="bg-white rounded-xl border border-slate-100 p-6 shadow-card">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-lg bg-teal-100 text-teal-600 flex items-center justify-center flex-shrink-0">
-                <Icon className="w-6 h-6" />
+      {/* Upload Form Panel */}
+      {showUploadForm && (
+        <div className="glass-panel p-6 sm:p-8 border-primary/30 animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="flex items-center justify-between border-b border-divider pb-4 mb-6">
+            <div>
+              <h2 className="text-xl font-semibold text-white">Upload Document Details</h2>
+              <p className="text-sm text-muted mt-1">Add metadata to organize your report.</p>
+            </div>
+            {file && (
+              <div className="bg-primary/10 border border-primary/20 rounded-full px-4 py-1.5 flex items-center gap-2 text-primary text-sm font-medium">
+                {file.type.includes('pdf') ? <FileText className="w-4 h-4" /> : <ImageIcon className="w-4 h-4" />}
+                <span className="truncate max-w-[200px]">{file.name}</span>
               </div>
-              <div>
-                <h2 className="font-semibold text-slate-900">{title}</h2>
-                <p className="text-slate-600 text-sm mt-1">{desc}</p>
-                <div className="mt-4 p-4 rounded-lg bg-slate-50 text-slate-500 text-sm">
-                  Data will appear here as you use CareSphere. Log symptoms, book appointments, set medication reminders, and track stress to build your report.
-                </div>
+            )}
+          </div>
+          
+          <form onSubmit={handleUploadSubmit} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-white/90">Report Title *</label>
+                <input required type="text" name="title" value={formData.title} onChange={handleFormInputChange} placeholder="e.g. Annual Blood Test" className="input-field" />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-white/90">Category *</label>
+                <select required name="category" value={formData.category} onChange={handleFormInputChange} className="input-field appearance-none">
+                  {CATEGORIES.map(c => <option key={c} value={c} className="bg-dark">{c}</option>)}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-white/90">Report Date *</label>
+                <input required type="date" name="reportDate" value={formData.reportDate} onChange={handleFormInputChange} className="input-field" />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-white/90">Doctor Name (Optional)</label>
+                <input type="text" name="doctorName" value={formData.doctorName} onChange={handleFormInputChange} placeholder="e.g. Dr. Emily Chen" className="input-field" />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-white/90">Hospital/Lab Name (Optional)</label>
+                <input type="text" name="hospitalName" value={formData.hospitalName} onChange={handleFormInputChange} placeholder="e.g. City General Hospital" className="input-field" />
               </div>
             </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-white/90">Additional Notes (Optional)</label>
+              <textarea name="notes" value={formData.notes} onChange={handleFormInputChange} placeholder="Any specific instructions or remarks..." className="input-field min-h-[100px] resize-y" />
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button disabled={uploading || !file} type="submit" className="glow-button inline-flex items-center gap-2 px-8 py-3 disabled:opacity-60 text-lg">
+                {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
+                {uploading ? 'Uploading & Saving...' : 'Save Report'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Controls Bar */}
+      <div className="flex flex-col sm:flex-row items-center gap-4 bg-white/5 border border-white/10 p-3 rounded-2xl">
+        <div className="relative flex-1 w-full">
+          <Search className="w-4 h-4 text-muted absolute left-4 top-1/2 -translate-y-1/2" />
+          <input 
+            type="text" placeholder="Search reports, doctors, or categories..." 
+            value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+            className="w-full bg-white/5 border border-transparent focus:border-primary/50 text-white rounded-xl py-2.5 pl-10 pr-4 outline-none transition-all placeholder:text-muted/60"
+          />
+        </div>
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="relative w-full sm:w-auto">
+            <Filter className="w-4 h-4 text-primary absolute left-3 top-1/2 -translate-y-1/2" />
+            <select 
+              value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}
+              className="w-full sm:w-auto min-w-[140px] bg-white/5 border border-transparent focus:border-primary/50 text-white rounded-xl py-2.5 pl-9 pr-4 outline-none appearance-none transition-all"
+            >
+              <option value="All" className="bg-dark">All Categories</option>
+              {CATEGORIES.map(c => <option key={c} value={c} className="bg-dark">{c}</option>)}
+            </select>
           </div>
-        ))}
+          <div className="relative w-full sm:w-auto">
+            <Calendar className="w-4 h-4 text-primary absolute left-3 top-1/2 -translate-y-1/2" />
+            <select 
+              value={dateFilter} onChange={e => setDateFilter(e.target.value)}
+              className="w-full sm:w-auto min-w-[140px] bg-white/5 border border-transparent focus:border-primary/50 text-white rounded-xl py-2.5 pl-9 pr-4 outline-none appearance-none transition-all"
+            >
+              {['All Time', 'Last 30 Days', 'Last 6 Months', 'This Year'].map(o => <option key={o} value={o} className="bg-dark">{o}</option>)}
+            </select>
+          </div>
+        </div>
       </div>
 
-      <div className="mt-8 p-4 rounded-lg bg-slate-50 border border-slate-200">
-        <p className="text-sm text-slate-600">
-          <strong>Note:</strong> Health reports are for personal reference only. Share with healthcare providers as needed. Data is stored locally and can be exported in JSON format.
-        </p>
-      </div>
+      {/* Timeline View */}
+      {loading ? (
+        <div className="flex items-center justify-center p-20 text-muted">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      ) : filteredReports.length === 0 ? (
+        <div className="glass-panel p-16 text-center flex flex-col items-center">
+          <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center mb-4">
+            <FileIcon className="w-8 h-8 text-muted/50" />
+          </div>
+          <h3 className="text-xl font-semibold text-white mb-2">No Reports Found</h3>
+          <p className="text-muted max-w-sm mb-6">
+            {searchQuery || categoryFilter !== 'All' ? "Try adjusting your search or filters to find what you're looking for." : "Upload your first health document to start building your clinical timeline."}
+          </p>
+          {!searchQuery && categoryFilter === 'All' && (
+             <button onClick={handleUploadClick} className="text-primary font-medium hover:text-white transition-colors">
+               + Add a Document
+             </button>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-10 relative before:absolute before:inset-0 before:ml-5 md:before:ml-6 before:-translate-x-px md:before:translate-x-0 before:w-0.5 before:bg-gradient-to-b before:from-primary/50 before:via-white/5 before:to-transparent">
+          {Object.entries(groupedTimeline).map(([monthYear, groupReports]) => (
+            <div key={monthYear} className="relative">
+              {/* Timeline Header */}
+              <div className="flex items-center gap-4 mb-6 relative z-10">
+                <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-dark border-4 border-background flex items-center justify-center shrink-0">
+                  <div className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-primary" />
+                </div>
+                <h3 className="text-lg md:text-xl font-bold tracking-tight text-white">{monthYear}</h3>
+                <div className="h-px flex-1 bg-white/10 ml-4 hidden sm:block" />
+              </div>
+
+              {/* Grid of Report Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 ml-12 md:ml-16">
+                {groupReports.map(report => (
+                  <div key={report._id} className="glass-panel p-5 group hover:-translate-y-1 transition-all duration-300">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-primary">
+                          {report.fileType.includes('pdf') ? <FileText className="w-5 h-5" /> : <ImageIcon className="w-5 h-5" />}
+                        </div>
+                        <div>
+                          <span className="text-xs font-semibold uppercase tracking-wider text-primary/80 bg-primary/10 px-2 py-0.5 rounded-lg mb-1 inline-block">
+                            {report.category}
+                          </span>
+                          <h4 className="text-base font-semibold text-white truncate max-w-[200px]" title={report.title}>
+                            {report.title}
+                          </h4>
+                        </div>
+                      </div>
+                      <p className="text-xs font-medium text-white/50 bg-white/5 px-2.5 py-1 rounded-md">
+                        {new Date(report.reportDate).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                      </p>
+                    </div>
+
+                    <div className="space-y-2 mb-6">
+                      {report.doctorName && (
+                        <div className="flex items-center gap-2 text-sm text-muted">
+                          <Stethoscope className="w-4 h-4 text-white/40" />
+                          <span className="truncate">{report.doctorName}</span>
+                        </div>
+                      )}
+                      {(report.doctorName && report.hospitalName) && <div className="hidden">...</div>}
+                      {report.hospitalName && (
+                        <div className="flex items-center gap-2 text-sm text-muted">
+                           <span className="w-4 h-4 inline-flex items-center justify-center text-white/40 text-[10px] font-bold border border-white/20 rounded-sm">H</span>
+                          <span className="truncate">{report.hospitalName}</span>
+                        </div>
+                      )}
+                      {!report.doctorName && !report.hospitalName && (
+                        <p className="text-sm text-muted/50 italic">No facility details added.</p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-3 border-t border-white/5 pt-4">
+                      <button 
+                        onClick={() => setPreviewReport(report)}
+                        className="flex-1 inline-flex items-center justify-center gap-2 py-2 rounded-xl bg-primary/10 text-primary font-medium hover:bg-primary/20 transition-colors text-sm"
+                      >
+                        <Eye className="w-4 h-4" /> Preview
+                      </button>
+                      <button 
+                         onClick={() => {
+                            const a = document.createElement('a'); 
+                            a.href = report.fileUrl; 
+                            a.download = report.title; 
+                            a.target = '_blank'; 
+                            a.click();
+                         }}
+                         className="p-2 rounded-xl bg-white/5 text-white/70 hover:bg-white/10 hover:text-white transition-colors"
+                         title="Download / Open Original"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(report._id)}
+                        className="p-2 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+                        title="Delete Report"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Preview Modal */}
+      {previewReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/90 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-card border border-divider rounded-2xl w-full max-w-5xl h-[90vh] flex flex-col shadow-2xl overflow-hidden relative">
+            <div className="flex items-center justify-between p-4 border-b border-divider bg-white/5">
+              <div className="flex items-center gap-3">
+                 <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                    {previewReport.fileType.includes('pdf') ? <FileText className="w-5 h-5" /> : <ImageIcon className="w-5 h-5" />}
+                 </div>
+                 <div>
+                    <h3 className="text-lg font-bold text-white">{previewReport.title}</h3>
+                    <p className="text-xs text-muted">
+                      {previewReport.category} • {new Date(previewReport.reportDate).toLocaleDateString()}
+                    </p>
+                 </div>
+              </div>
+              <button 
+                onClick={() => setPreviewReport(null)}
+                className="w-10 h-10 rounded-full flex items-center justify-center bg-white/10 hover:bg-white/20 text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="flex-1 bg-black/50 overflow-auto flex items-center justify-center p-4">
+              {previewReport.fileType.includes('pdf') ? (
+                <div className="w-full h-full flex flex-col items-center justify-center bg-white rounded-xl overflow-hidden p-2 relative group">
+                   <img 
+                      src={previewReport.fileUrl.replace(/\.pdf$/i, '.jpg')} 
+                      alt={previewReport.title} 
+                      className="w-full h-full object-contain"
+                   />
+                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
+                      <a href={previewReport.fileUrl} target="_blank" rel="noreferrer" className="bg-primary text-white px-6 py-3 rounded-xl font-medium flex items-center gap-2 hover:bg-primary/90 transition-colors shadow-xl">
+                        <Download className="w-5 h-5" /> Download Full PDF
+                      </a>
+                   </div>
+                </div>
+              ) : previewReport.fileType.startsWith('image/') ? (
+                <img 
+                  src={previewReport.fileUrl} 
+                  alt={previewReport.title} 
+                  className="max-w-full max-h-full rounded-xl object-contain shadow-2xl"
+                />
+              ) : (
+                <div className="text-center">
+                  <FileIcon className="w-16 h-16 text-muted/50 mx-auto mb-4" />
+                  <p className="text-white text-lg">Preview not available</p>
+                  <a href={previewReport.fileUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline mt-2 inline-block">Download file instead</a>
+                </div>
+              )}
+            </div>
+
+            {previewReport.notes && (
+              <div className="p-4 bg-white/5 border-t border-divider text-sm">
+                <p className="font-semibold text-white/80 mb-1">Doctor/Self Notes</p>
+                <p className="text-muted">{previewReport.notes}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
