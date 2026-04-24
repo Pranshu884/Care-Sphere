@@ -1,8 +1,0 @@
-﻿
-> care-sphere@0.0.0 build
-> tsc -b && vite build
-
-src/lib/triageEngine.ts(79,72): error TS6133: 'context' is declared but its value is never read.
-src/pages/SymptomChecker.tsx(4,24): error TS1484: 'Question' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
-src/pages/SymptomChecker.tsx(4,34): error TS1484: 'TriageResult' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
-src/pages/SymptomChecker.tsx(4,48): error TS1484: 'UserContext' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.

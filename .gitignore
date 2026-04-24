@@ -26,3 +26,7 @@ dist-ssr
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+server/uploads/
+server/test_*.js
+build-errors.txt
+build_err.txt
