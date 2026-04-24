@@ -30,3 +30,4 @@ server/uploads/
 server/test_*.js
 build-errors.txt
 build_err.txt
+ts_error.txt
