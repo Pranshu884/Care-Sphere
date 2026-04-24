@@ -1,4 +1,6 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { getMe, logoutUser } from '../lib/auth';
 import {
   Stethoscope, Calendar, Pill, FileText,
   Shield, Zap, UserCheck, Lock,
@@ -131,6 +133,24 @@ function MockDashboard() {
 
 /* ─── Main Component ────────────────────────────────────── */
 export default function Home() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const token = localStorage.getItem('caresphere_token');
+    if (token) {
+      getMe().then(res => {
+        if (res.ok) {
+          const role = localStorage.getItem('role') || 'user';
+          if (role === 'admin') navigate('/admin/dashboard');
+          else if (role === 'doctor') navigate('/doctor/dashboard');
+          else navigate('/dashboard');
+        } else {
+          logoutUser();
+        }
+      });
+    }
+  }, [navigate]);
+
   return (
     <div className="overflow-x-hidden">
 

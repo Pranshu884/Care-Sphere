@@ -14,9 +14,14 @@ interface ReportRecord {
   reportDate: string;
   notes?: string;
   createdAt: string;
+  aiSummary?: string;
+  aiAbnormalities?: string[];
+  aiRecommendations?: string[];
+  healthMetrics?: Record<string, string>;
+  followUpDate?: string;
 }
 
-const CATEGORIES = ['Blood Test', 'X-ray', 'MRI/CT Scan', 'Prescription', 'Medical Certificate', 'Other'];
+const CATEGORIES = ['Auto-Detect (AI)', 'Blood Test', 'X-ray', 'MRI/CT Scan', 'Prescription', 'Medical Certificate', 'Other'];
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 export default function HealthReports() {
@@ -32,12 +37,19 @@ export default function HealthReports() {
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [dateFilter, setDateFilter] = useState('All Time');
 
+  // Emergency Profile
+  const [userProfile, setUserProfile] = useState<any>(null);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+     bloodGroup: '', allergies: '', chronicDiseases: '', currentMedications: ''
+  });
+
   // Upload Form States
   const [uploading, setUploading] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [formData, setFormData] = useState({
     title: '',
-    category: 'Blood Test',
+    category: 'Auto-Detect (AI)',
     reportDate: new Date().toISOString().split('T')[0],
     doctorName: '',
     hospitalName: '',
@@ -48,7 +60,24 @@ export default function HealthReports() {
 
   useEffect(() => {
     fetchReports();
+    fetchProfile();
   }, []);
+
+  const fetchProfile = async () => {
+     try {
+       const res = await fetch(`${API_BASE_URL}/api/auth/me`, { headers: { Authorization: `Bearer ${getToken()}` } });
+       const data = await res.json();
+       if (res.ok && data.success) {
+          setUserProfile(data.user);
+          setProfileForm({
+             bloodGroup: data.user.bloodGroup || '',
+             allergies: data.user.allergies?.join(', ') || '',
+             chronicDiseases: data.user.chronicDiseases?.join(', ') || '',
+             currentMedications: data.user.currentMedications?.join(', ') || ''
+          });
+       }
+     } catch(e) {}
+  };
 
   const fetchReports = async () => {
     try {
@@ -117,7 +146,7 @@ export default function HealthReports() {
         setReports([data.report, ...reports]);
         setShowUploadForm(false);
         setFile(null);
-        setFormData({ title: '', category: 'Blood Test', reportDate: new Date().toISOString().split('T')[0], doctorName: '', hospitalName: '', notes: '' });
+        setFormData({ title: '', category: 'Auto-Detect (AI)', reportDate: new Date().toISOString().split('T')[0], doctorName: '', hospitalName: '', notes: '' });
       } else {
         alert(data.message || 'Upload failed');
       }
@@ -128,6 +157,42 @@ export default function HealthReports() {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
+  };
+
+  const handleUpdateNotes = async (id: string, notes: string) => {
+     try {
+       await fetch(`${API_BASE_URL}/api/reports/${id}/notes`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+          body: JSON.stringify({ notes })
+       });
+       setReports(prev => prev.map(r => r._id === id ? { ...r, notes } : r));
+       if (previewReport && previewReport._id === id) {
+          setPreviewReport({ ...previewReport, notes });
+       }
+     } catch (e) {
+       console.error(e);
+     }
+  };
+
+  const saveEmergencyProfile = async () => {
+     try {
+       const payload = {
+          bloodGroup: profileForm.bloodGroup,
+          allergies: profileForm.allergies.split(',').map(s=>s.trim()).filter(Boolean),
+          chronicDiseases: profileForm.chronicDiseases.split(',').map(s=>s.trim()).filter(Boolean),
+          currentMedications: profileForm.currentMedications.split(',').map(s=>s.trim()).filter(Boolean),
+       };
+       const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+          body: JSON.stringify(payload)
+       });
+       if (res.ok) {
+          fetchProfile();
+          setEditingProfile(false);
+       }
+     } catch (e) {}
   };
 
   const handleDelete = async (id: string) => {
@@ -206,6 +271,59 @@ export default function HealthReports() {
         </div>
       </div>
 
+      {/* EMERGENCY QUICK PROFILE */}
+      {userProfile && (
+         <div className="glass-panel p-5 border-l-4 border-l-red-500/80 mb-8 animate-in fade-in duration-300">
+           <div className="flex justify-between items-center mb-4">
+             <h2 className="text-lg font-bold text-white flex items-center gap-2">
+               <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /> Emergency Profile
+             </h2>
+             <button onClick={() => setEditingProfile(!editingProfile)} className="text-sm text-primary hover:text-primary-light">
+               {editingProfile ? 'Cancel' : 'Edit Details'}
+             </button>
+           </div>
+           
+           {editingProfile ? (
+             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-3">
+               <div><label className="text-xs text-muted">Blood Group</label><input className="w-full bg-white/5 border border-white/10 focus:border-primary/50 focus:ring-1 focus:ring-primary/50 text-white rounded-lg py-1.5 px-3 mb-1 text-sm outline-none transition-all placeholder:text-muted/40" value={profileForm.bloodGroup} onChange={e=>setProfileForm({...profileForm, bloodGroup: e.target.value})} placeholder="e.g. O+" /></div>
+               <div><label className="text-xs text-muted">Allergies</label><input className="w-full bg-white/5 border border-white/10 focus:border-primary/50 focus:ring-1 focus:ring-primary/50 text-white rounded-lg py-1.5 px-3 mb-1 text-sm outline-none transition-all placeholder:text-muted/40" value={profileForm.allergies} onChange={e=>setProfileForm({...profileForm, allergies: e.target.value})} placeholder="Peanuts, Penicillin..." /></div>
+               <div><label className="text-xs text-muted">Chronic Diseases</label><input className="w-full bg-white/5 border border-white/10 focus:border-primary/50 focus:ring-1 focus:ring-primary/50 text-white rounded-lg py-1.5 px-3 mb-1 text-sm outline-none transition-all placeholder:text-muted/40" value={profileForm.chronicDiseases} onChange={e=>setProfileForm({...profileForm, chronicDiseases: e.target.value})} placeholder="Asthma, Diabetes..." /></div>
+               <div><label className="text-xs text-muted">Current Meds</label><input className="w-full bg-white/5 border border-white/10 focus:border-primary/50 focus:ring-1 focus:ring-primary/50 text-white rounded-lg py-1.5 px-3 mb-1 text-sm outline-none transition-all placeholder:text-muted/40" value={profileForm.currentMedications} onChange={e=>setProfileForm({...profileForm, currentMedications: e.target.value})} placeholder="Metformin 500mg..." /></div>
+               <button onClick={saveEmergencyProfile} className="glow-button py-2 col-span-1 sm:col-span-2 lg:col-span-4 mt-2">Save Profile</button>
+             </div>
+           ) : (
+             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-black/20 p-4 rounded-xl border border-white/5">
+               <div><p className="text-xs text-muted uppercase tracking-wider mb-1">Blood Group</p><p className="text-sm font-semibold text-white">{userProfile.bloodGroup || 'Not Specified'}</p></div>
+               <div><p className="text-xs text-muted uppercase tracking-wider mb-1">Allergies</p><p className="text-sm font-semibold text-white">{userProfile.allergies?.length ? userProfile.allergies.join(', ') : 'None Reported'}</p></div>
+               <div><p className="text-xs text-muted uppercase tracking-wider mb-1">Chronic Issues</p><p className="text-sm font-semibold text-white">{userProfile.chronicDiseases?.length ? userProfile.chronicDiseases.join(', ') : 'None Reported'}</p></div>
+               <div><p className="text-xs text-muted uppercase tracking-wider mb-1">Current Meds</p><p className="text-sm font-semibold text-white">{userProfile.currentMedications?.length ? userProfile.currentMedications.join(', ') : 'None Reported'}</p></div>
+             </div>
+           )}
+         </div>
+      )}
+
+      {/* HEALTH TRENDS (AI Extracted) */}
+      {reports.some(r => r.healthMetrics && Object.keys(r.healthMetrics).length > 0) && (
+        <div className="space-y-3 mb-8">
+          <h3 className="text-sm font-semibold text-primary/80 uppercase tracking-wider flex items-center gap-2"><div className="w-1.5 h-1.5 bg-primary rounded-full"></div> Tracked Metrics</h3>
+          <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
+            {Array.from(new Set(reports.flatMap(r => Object.keys(r.healthMetrics || {})))).slice(0, 5).map(metricKey => {
+               // Get most recent value
+               const latestReport = reports.find(r => r.healthMetrics?.[metricKey]);
+               // Formatting key nicely
+               const name = metricKey.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+               return (
+                  <div key={metricKey} className="glass-panel min-w-[150px] p-4 flex-shrink-0 border-primary/20">
+                    <p className="text-xs text-muted truncate">{name}</p>
+                    <p className="text-xl font-bold text-white mt-1">{latestReport?.healthMetrics?.[metricKey]}</p>
+                    <p className="text-[10px] text-muted/70 mt-1">from {new Date(latestReport?.reportDate || '').toLocaleDateString()}</p>
+                  </div>
+               )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Upload Form Panel */}
       {showUploadForm && (
         <div className="glass-panel p-6 sm:p-8 border-primary/30 animate-in fade-in slide-in-from-top-4 duration-300">
@@ -226,41 +344,41 @@ export default function HealthReports() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-white/90">Report Title *</label>
-                <input required type="text" name="title" value={formData.title} onChange={handleFormInputChange} placeholder="e.g. Annual Blood Test" className="input-field" />
+                <input required type="text" name="title" value={formData.title} onChange={handleFormInputChange} placeholder="e.g. Annual Blood Test" className="w-full bg-white/5 border border-white/10 focus:border-primary/50 focus:ring-1 focus:ring-primary/50 text-white rounded-xl px-4 py-2.5 outline-none transition-all placeholder:text-muted/40" />
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-white/90">Category *</label>
-                <select required name="category" value={formData.category} onChange={handleFormInputChange} className="input-field appearance-none">
-                  {CATEGORIES.map(c => <option key={c} value={c} className="bg-dark">{c}</option>)}
+                <select required name="category" value={formData.category} onChange={handleFormInputChange} className="w-full bg-white/5 border border-white/10 focus:border-primary/50 focus:ring-1 focus:ring-primary/50 text-white rounded-xl px-4 py-2.5 outline-none transition-all appearance-none cursor-pointer">
+                  {CATEGORIES.map(c => <option key={c} value={c} className="bg-background text-white">{c}</option>)}
                 </select>
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-white/90">Report Date *</label>
-                <input required type="date" name="reportDate" value={formData.reportDate} onChange={handleFormInputChange} className="input-field" />
+                <input required type="date" name="reportDate" value={formData.reportDate} onChange={handleFormInputChange} className="w-full bg-white/5 border border-white/10 focus:border-primary/50 focus:ring-1 focus:ring-primary/50 text-white rounded-xl px-4 py-2.5 outline-none transition-all [color-scheme:dark]" />
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-white/90">Doctor Name (Optional)</label>
-                <input type="text" name="doctorName" value={formData.doctorName} onChange={handleFormInputChange} placeholder="e.g. Dr. Emily Chen" className="input-field" />
+                <input type="text" name="doctorName" value={formData.doctorName} onChange={handleFormInputChange} placeholder="e.g. Dr. Emily Chen" className="w-full bg-white/5 border border-white/10 focus:border-primary/50 focus:ring-1 focus:ring-primary/50 text-white rounded-xl px-4 py-2.5 outline-none transition-all placeholder:text-muted/40" />
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-white/90">Hospital/Lab Name (Optional)</label>
-                <input type="text" name="hospitalName" value={formData.hospitalName} onChange={handleFormInputChange} placeholder="e.g. City General Hospital" className="input-field" />
+                <input type="text" name="hospitalName" value={formData.hospitalName} onChange={handleFormInputChange} placeholder="e.g. City General Hospital" className="w-full bg-white/5 border border-white/10 focus:border-primary/50 focus:ring-1 focus:ring-primary/50 text-white rounded-xl px-4 py-2.5 outline-none transition-all placeholder:text-muted/40" />
               </div>
             </div>
 
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-white/90">Additional Notes (Optional)</label>
-              <textarea name="notes" value={formData.notes} onChange={handleFormInputChange} placeholder="Any specific instructions or remarks..." className="input-field min-h-[100px] resize-y" />
+              <textarea name="notes" value={formData.notes} onChange={handleFormInputChange} placeholder="Any specific instructions or remarks..." className="w-full bg-white/5 border border-white/10 focus:border-primary/50 focus:ring-1 focus:ring-primary/50 text-white rounded-xl px-4 py-3 outline-none transition-all placeholder:text-muted/40 min-h-[100px] resize-y" />
             </div>
 
             <div className="flex justify-end pt-2">
               <button disabled={uploading || !file} type="submit" className="glow-button inline-flex items-center gap-2 px-8 py-3 disabled:opacity-60 text-lg">
                 {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
-                {uploading ? 'Uploading & Saving...' : 'Save Report'}
+                {uploading ? 'Processing Intelligence...' : 'Save Report'}
               </button>
             </div>
           </form>
@@ -464,12 +582,85 @@ export default function HealthReports() {
               )}
             </div>
 
-            {previewReport.notes && (
-              <div className="p-4 bg-white/5 border-t border-divider text-sm">
-                <p className="font-semibold text-white/80 mb-1">Doctor/Self Notes</p>
-                <p className="text-muted">{previewReport.notes}</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-divider border-t border-divider">
+              
+              {/* Left Side: AI Intelligence */}
+              <div className="bg-dark p-6 space-y-8 overflow-y-auto max-h-[40vh] scrollbar-thin scrollbar-thumb-white/10">
+                 <div className="flex items-center gap-3 text-primary font-bold border-b border-white/10 pb-4">
+                   <div className="w-2.5 h-2.5 text-primary bg-primary rounded-full animate-pulse shadow-[0_0_10px_rgba(45,212,191,1)]" /> 
+                   <span className="text-lg tracking-wide">AI Health Intelligence</span>
+                 </div>
+
+                 {previewReport.aiSummary && (
+                    <div className="space-y-2">
+                       <h4 className="text-xs font-bold text-white/50 uppercase tracking-wider">Summary</h4>
+                       <div className="text-sm text-white/95 leading-relaxed bg-white/5 p-4 rounded-xl border border-white/10 whitespace-pre-wrap shadow-inner">
+                         {previewReport.aiSummary}
+                       </div>
+                    </div>
+                 )}
+
+                 {previewReport.aiAbnormalities && previewReport.aiAbnormalities.length > 0 && (
+                    <div className="space-y-3">
+                       <h4 className="text-sm font-bold text-red-400 uppercase tracking-wider flex items-center gap-2">
+                          ⚠ Abnormal Findings
+                       </h4>
+                       <ul className="space-y-3">
+                         {previewReport.aiAbnormalities.map((item, idx) => (
+                           <li key={idx} className="text-sm font-semibold text-red-100 bg-red-500/20 border-l-4 border-red-500 px-4 py-3 rounded-r-lg shadow-sm leading-relaxed">
+                             {item}
+                           </li>
+                         ))}
+                       </ul>
+                    </div>
+                 )}
+
+                 {previewReport.aiRecommendations && previewReport.aiRecommendations.length > 0 && (
+                    <div className="space-y-3">
+                       <h4 className="text-sm font-bold text-primary/90 uppercase tracking-wider flex items-center gap-2">
+                          💡 Practical Advice & Discussion
+                       </h4>
+                       <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 shadow-sm">
+                         <p className="text-xs font-semibold text-primary/70 mb-3 uppercase tracking-wide">You may want to ask your doctor about:</p>
+                         <ul className="list-disc pl-5 space-y-2">
+                           {previewReport.aiRecommendations.map((item, idx) => (
+                             <li key={idx} className="text-sm font-medium text-white/80 leading-relaxed">{item}</li>
+                           ))}
+                         </ul>
+                       </div>
+                    </div>
+                 )}
+                 
+                 {!previewReport.aiSummary && (
+                   <div className="p-6 bg-white/5 rounded-xl border border-white/10 text-center my-8">
+                     <p className="text-sm text-muted font-medium">No AI insights generated for this report.</p>
+                   </div>
+                 )}
+
+                 <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-center mt-6">
+                    <p className="text-[11px] text-red-300/80 font-semibold tracking-widest uppercase">⚠ This is not a medical diagnosis. Please consult your doctor.</p>
+                 </div>
               </div>
-            )}
+
+              {/* Right Side: Doctor Notes */}
+              <div className="bg-black/40 p-6 flex flex-col">
+                 <h4 className="text-sm font-semibold text-white/80 mb-3 flex items-center gap-2">
+                    <Stethoscope className="w-4 h-4 text-primary" /> Doctor Advice & Instructions
+                 </h4>
+                 <textarea 
+                    className="flex-1 w-full bg-white/5 border border-white/10 focus:border-primary/50 focus:ring-1 focus:ring-primary/50 text-white rounded-xl resize-none min-h-[150px] p-4 text-sm leading-relaxed outline-none transition-all placeholder:text-muted/40 shadow-inner"
+                    placeholder="Enter notes, precautions, or next visit dates here..."
+                    defaultValue={previewReport.notes || ''}
+                    onBlur={(e) => {
+                       if (e.target.value !== previewReport.notes) {
+                          handleUpdateNotes(previewReport._id, e.target.value);
+                       }
+                    }}
+                 />
+                 <p className="text-xs text-muted mt-3">Changes are saved automatically when clicking outside.</p>
+              </div>
+
+            </div>
           </div>
         </div>
       )}

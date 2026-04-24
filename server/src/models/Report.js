@@ -11,8 +11,14 @@ const ReportSchema = new mongoose.Schema(
     hospitalName: { type: String, default: '' },
     reportDate: { type: Date, required: true },
     notes: { type: String, default: '' },
+
+    // AI Intelligence Fields
+    aiSummary: { type: String, default: '' },
+    aiAbnormalities: { type: [String], default: [] },
+    aiRecommendations: { type: [String], default: [] },
+    healthMetrics: { type: Map, of: String, default: {} },
+    followUpDate: { type: Date }
   },
   { timestamps: true }
 );
-
 export default mongoose.model('Report', ReportSchema);

@@ -7,6 +7,8 @@ import {
   setSessionUser,
   setToken,
   verifyRegisterEmailOtp,
+  getMe,
+  logoutUser
 } from '../lib/auth';
 
 export default function Register() {
@@ -37,6 +39,22 @@ export default function Register() {
       if (cooldownIntervalRef.current) window.clearInterval(cooldownIntervalRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    const token = localStorage.getItem('caresphere_token');
+    if (token) {
+      getMe().then(res => {
+        if (res.ok) {
+          const role = localStorage.getItem('role') || 'user';
+          if (role === 'admin') navigate('/admin/dashboard');
+          else if (role === 'doctor') navigate('/doctor/dashboard');
+          else navigate('/dashboard');
+        } else {
+          logoutUser();
+        }
+      });
+    }
+  }, [navigate]);
 
   const startCooldown = (seconds: number) => {
     if (cooldownIntervalRef.current) window.clearInterval(cooldownIntervalRef.current);

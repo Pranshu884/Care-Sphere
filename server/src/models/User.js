@@ -17,6 +17,17 @@ const UserSchema = new mongoose.Schema(
     doctorProfileId: { type: mongoose.Schema.Types.ObjectId, ref: 'Doctor' },
     isBlocked: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
+
+    // Emergency Quick Profile
+    bloodGroup: { type: String, default: '' },
+    allergies: { type: [String], default: [] },
+    chronicDiseases: { type: [String], default: [] },
+    majorSurgeries: { type: [String], default: [] },
+    currentMedications: { type: [String], default: [] },
+    emergencyContact: {
+      name: { type: String, default: '' },
+      phone: { type: String, default: '' }
+    }
   },
   { timestamps: true }
 );

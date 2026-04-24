@@ -88,6 +88,15 @@ export function clearSessionUser() {
   localStorage.removeItem(SESSION_KEY);
 }
 
+export function logoutUser() {
+  clearToken();
+  clearSessionUser();
+  localStorage.removeItem('role');
+  localStorage.removeItem('token');
+  sessionStorage.clear();
+  window.location.href = '/login';
+}
+
 export async function requestRegisterOtp(payload: {
   name: string;
   email: string;

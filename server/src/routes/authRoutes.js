@@ -55,12 +55,12 @@ router.post('/logout', async (req, res) => {
 });
 
 router.get('/me', authMiddleware, async (req, res) => {
-  const result = await authService.getMe({ userId: req.auth?.sub });
+  const result = await authService.getMe({ userId: req.auth?.userId });
   return res.status(result.status).json(result.body);
 });
 
 router.patch('/me', authMiddleware, async (req, res) => {
-  const result = await authService.updateMe({ userId: req.auth?.sub, ...(req.body || {}) });
+  const result = await authService.updateMe({ userId: req.auth?.userId, ...(req.body || {}) });
   return res.status(result.status).json(result.body);
 });
 

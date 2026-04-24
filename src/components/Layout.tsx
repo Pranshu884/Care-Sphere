@@ -1,23 +1,17 @@
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
 import Navbar from './Navbar';
-import Sidebar from './Sidebar';
 import Footer from './Footer';
 
-const dashboardPaths = ['/dashboard', '/symptom-checker', '/appointments', '/medicine-reminder', '/stress-tracker', '/health-reports', '/profile'];
-
 export default function Layout() {
-  const location = useLocation();
-  const showSidebar = dashboardPaths.includes(location.pathname);
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-[#0f1117] font-sans">
       <Navbar />
-      <div className="flex-1 flex">
-        {showSidebar && <Sidebar />}
-        <main className={`flex-1 ${showSidebar ? 'lg:ml-0' : ''}`}>
+      <div className="flex-1 flex w-full">
+        <main className="flex-1 w-full">
           <Outlet />
         </main>
       </div>
-        <Footer />
+      <Footer />
     </div>
   );
 }

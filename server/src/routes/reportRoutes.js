@@ -4,6 +4,7 @@ import { v2 as cloudinary } from 'cloudinary';
 import streamifier from 'streamifier';
 import Report from '../models/Report.js';
 import authMiddleware from '../middleware/authMiddleware.js';
+import { analyzeHealthReport } from '../services/aiService.js';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -48,18 +49,28 @@ router.post('/upload', upload.single('report'), async (req, res) => {
         });
     };
 
-    const uploadResult = await streamUpload(req);
+    // Process both Cloudinary upload and AI Analysis concurrently
+    const [uploadResult, aiAnalysis] = await Promise.all([
+      streamUpload(req),
+      analyzeHealthReport(req.file.buffer, req.file.mimetype)
+    ]);
 
     const newReport = new Report({
-      userId: req.auth.userId, // From auth middleware
+      userId: req.auth.userId,
       title: title || 'Untitled Report',
-      category: category || 'Other',
+      // Always favor AI category prediction if present, or fallback to user selected/Other
+      category: aiAnalysis?.category || category || 'Other',
       fileUrl: uploadResult.secure_url,
       fileType: req.file.mimetype,
       doctorName: doctorName || '',
       hospitalName: hospitalName || '',
       reportDate: reportDate ? new Date(reportDate) : new Date(),
       notes: notes || '',
+      aiSummary: aiAnalysis?.summary || '',
+      aiAbnormalities: aiAnalysis?.abnormalities || [],
+      aiRecommendations: aiAnalysis?.recommendations || [],
+      healthMetrics: aiAnalysis?.healthMetrics || {},
+      followUpDate: aiAnalysis?.followUpDate ? new Date(aiAnalysis.followUpDate) : undefined,
     });
 
     await newReport.save();
@@ -107,5 +118,28 @@ router.delete('/:id', async (req, res) => {
     res.status(500).json({ success: false, message: 'Delete failed.' });
   }
 });
+
+// ---------------------------------------------------------------------------
+// ADDED FOR AI DOCTOR NOTES / EMERGENCY PROFILE
+// ---------------------------------------------------------------------------
+
+// Update Doctor Notes on an existing report
+router.put('/:id/notes', async (req, res) => {
+   try {
+      const { notes } = req.body;
+      const report = await Report.findOneAndUpdate(
+         { _id: req.params.id, userId: req.auth.userId },
+         { notes },
+         { new: true }
+      );
+      if (!report) return res.status(404).json({ success: false, message: 'Report not found.' });
+      res.json({ success: true, report });
+   } catch (error) {
+      console.error('Update notes error:', error);
+      res.status(500).json({ success: false, message: 'Failed to update notes.' });
+   }
+});
+
+// We can put emergency profile under auth or user routes usually, but for scoping within Health Hub, letting it sit under user router is better. Since this file is export default router, and mounted on /api/reports, we might want to put emergency profile in a user route or add it to authRoutes instead.
 
 export default router;

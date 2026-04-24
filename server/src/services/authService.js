@@ -36,6 +36,13 @@ function toPublicUser(u) {
     isActive: u.isActive !== false,
     createdAt: u.createdAt,
     updatedAt: u.updatedAt,
+    // Emergency Profile
+    bloodGroup: u.bloodGroup || '',
+    allergies: u.allergies || [],
+    chronicDiseases: u.chronicDiseases || [],
+    majorSurgeries: u.majorSurgeries || [],
+    currentMedications: u.currentMedications || [],
+    emergencyContact: u.emergencyContact || { name: '', phone: '' }
   };
 }
 
@@ -263,6 +270,20 @@ async function updateMe({ userId, name, email, phone }) {
   }
 
   if (typeof phone === 'string') user.phone = String(phone);
+
+  // Emergency Profile Updates
+  const { bloodGroup, allergies, chronicDiseases, majorSurgeries, currentMedications, emergencyContact } = arguments[0];
+  if (bloodGroup !== undefined) user.bloodGroup = bloodGroup;
+  if (Array.isArray(allergies)) user.allergies = allergies;
+  if (Array.isArray(chronicDiseases)) user.chronicDiseases = chronicDiseases;
+  if (Array.isArray(majorSurgeries)) user.majorSurgeries = majorSurgeries;
+  if (Array.isArray(currentMedications)) user.currentMedications = currentMedications;
+  if (emergencyContact && typeof emergencyContact === 'object') {
+     user.emergencyContact = {
+        name: emergencyContact.name || user.emergencyContact?.name || '',
+        phone: emergencyContact.phone || user.emergencyContact?.phone || ''
+     };
+  }
 
   await user.save();
 
