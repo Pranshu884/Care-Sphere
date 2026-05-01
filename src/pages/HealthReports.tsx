@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { Upload, File as FileIcon, Loader2, Search, Filter, Plus, X, Eye, Trash2, Calendar, FileText, ImageIcon, Download, Stethoscope } from 'lucide-react';
 import { getToken } from '../lib/auth';
+import Select from '../components/ui/Select';
 
 interface ReportRecord {
   _id: string;
@@ -18,7 +19,7 @@ interface ReportRecord {
   aiAbnormalities?: string[];
   aiRecommendations?: string[];
   healthMetrics?: Record<string, string>;
-  followUpDate?: string;
+  followUpSuggestion?: string;
 }
 
 const CATEGORIES = ['Auto-Detect (AI)', 'Blood Test', 'X-ray', 'MRI/CT Scan', 'Prescription', 'Medical Certificate', 'Other'];
@@ -347,11 +348,15 @@ export default function HealthReports() {
                 <input required type="text" name="title" value={formData.title} onChange={handleFormInputChange} placeholder="e.g. Annual Blood Test" className="w-full bg-white/5 border border-white/10 focus:border-primary/50 focus:ring-1 focus:ring-primary/50 text-white rounded-xl px-4 py-2.5 outline-none transition-all placeholder:text-muted/40" />
               </div>
 
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 z-50">
                 <label className="text-sm font-medium text-white/90">Category *</label>
-                <select required name="category" value={formData.category} onChange={handleFormInputChange} className="w-full bg-white/5 border border-white/10 focus:border-primary/50 focus:ring-1 focus:ring-primary/50 text-white rounded-xl px-4 py-2.5 outline-none transition-all appearance-none cursor-pointer">
-                  {CATEGORIES.map(c => <option key={c} value={c} className="bg-background text-white">{c}</option>)}
-                </select>
+                <Select 
+                  required 
+                  value={formData.category} 
+                  onChange={val => handleFormInputChange({ target: { name: 'category', value: val } } as any)} 
+                  options={CATEGORIES.map(c => ({ value: c, label: c }))}
+                  className="w-full"
+                />
               </div>
 
               <div className="space-y-1.5">
@@ -396,24 +401,23 @@ export default function HealthReports() {
           />
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
-          <div className="relative w-full sm:w-auto">
-            <Filter className="w-4 h-4 text-primary absolute left-3 top-1/2 -translate-y-1/2" />
-            <select 
-              value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}
-              className="w-full sm:w-auto min-w-[140px] bg-white/5 border border-transparent focus:border-primary/50 text-white rounded-xl py-2.5 pl-9 pr-4 outline-none appearance-none transition-all"
-            >
-              <option value="All" className="bg-dark">All Categories</option>
-              {CATEGORIES.map(c => <option key={c} value={c} className="bg-dark">{c}</option>)}
-            </select>
+          <div className="relative w-full sm:w-auto z-40">
+            <Filter className="w-4 h-4 text-primary absolute left-3 top-1/2 -translate-y-1/2 z-10 pointer-events-none" />
+            <Select 
+              value={categoryFilter} 
+              onChange={val => setCategoryFilter(val)}
+              options={[{value: 'All', label: 'All Categories'}, ...CATEGORIES.map(c => ({value: c, label: c}))]}
+              className="w-full sm:w-auto min-w-[170px] pl-8"
+            />
           </div>
-          <div className="relative w-full sm:w-auto">
-            <Calendar className="w-4 h-4 text-primary absolute left-3 top-1/2 -translate-y-1/2" />
-            <select 
-              value={dateFilter} onChange={e => setDateFilter(e.target.value)}
-              className="w-full sm:w-auto min-w-[140px] bg-white/5 border border-transparent focus:border-primary/50 text-white rounded-xl py-2.5 pl-9 pr-4 outline-none appearance-none transition-all"
-            >
-              {['All Time', 'Last 30 Days', 'Last 6 Months', 'This Year'].map(o => <option key={o} value={o} className="bg-dark">{o}</option>)}
-            </select>
+          <div className="relative w-full sm:w-auto z-30">
+            <Calendar className="w-4 h-4 text-primary absolute left-3 top-1/2 -translate-y-1/2 z-10 pointer-events-none" />
+            <Select 
+              value={dateFilter} 
+              onChange={val => setDateFilter(val)}
+              options={['All Time', 'Last 30 Days', 'Last 6 Months', 'This Year'].map(o => ({value: o, label: o}))}
+              className="w-full sm:w-auto min-w-[160px] pl-8"
+            />
           </div>
         </div>
       </div>

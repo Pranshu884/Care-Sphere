@@ -78,5 +78,15 @@ router.post('/reset-password', async (req, res) => {
   return res.status(result.status).json(result.body);
 });
 
+router.patch('/change-password', authMiddleware, async (req, res) => {
+  const result = await authService.changePassword({ userId: req.auth?.userId, ...(req.body || {}) });
+  return res.status(result.status).json(result.body);
+});
+
+router.post('/verify-password', authMiddleware, async (req, res) => {
+  const result = await authService.verifyCurrentPassword({ userId: req.auth?.userId, currentPassword: req.body?.currentPassword });
+  return res.status(result.status).json(result.body);
+});
+
 export default router;
 

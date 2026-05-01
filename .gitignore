@@ -22,12 +22,34 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment secrets
 .env
+.env.local
+.env.production
+
+# SQLite OTP database
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+
+# Server uploads folder
 server/uploads/
+
+# Server test/scratch scripts
 server/test_*.js
+server/test-*.mjs
+server/check*.mjs
+server/check.js
+server/lint.mjs
+server/lint_output.txt
+server/err.txt
+server/create_demo_login.js
+
+# Build error logs
 build-errors.txt
 build_err.txt
 ts_error.txt
+tsc_app_err.log
+tsc_app_err_utf8.log
+errors.log

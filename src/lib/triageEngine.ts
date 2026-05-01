@@ -20,10 +20,11 @@ export interface TriageResult {
   homeCare: string[];
   action: { type: 'maps' | 'book' | 'home'; text: string };
   parsedContext: {
-    symptom: string;
+    symptoms: string[];
     duration: string;
     severity: string;
   };
+  isFallback: boolean;
 }
 
 export interface UserContext {
@@ -64,141 +65,101 @@ const SYMPTOM_DATA: Record<string, { redFlags: string[], homeCare: string[] }> =
   skin_rash: {
     redFlags: ['Rash spreading rapidly', 'Difficulty breathing or facial swelling', 'Fever over 100°F (37.8°C)', 'Blisters or open sores'],
     homeCare: ['Keep the area clean and dry', 'Apply a cool compress', 'Use over-the-counter anti-itch cream', 'Avoid scratching the affected area']
+  },
+  diarrhea: {
+    redFlags: ['Black or bloody stools', 'Severe dehydration (dry mouth, no urination)', 'High fever above 102°F (38.9°C)', 'Severe abdominal pain'],
+    homeCare: ['Drink plenty of clear fluids (water, oral rehydration solutions)', 'Eat a BRAT diet (bananas, rice, applesauce, toast)', 'Avoid dairy, caffeine, and greasy foods', 'Rest']
+  },
+  shoulder_pain: {
+    redFlags: ['Pain accompanied by chest tightness or shortness of breath', 'Inability to move the arm', 'Sudden swelling or intense pain', 'Numbness or tingling in the arm'],
+    homeCare: ['Rest the shoulder and avoid heavy lifting', 'Apply ice for 15-20 minutes a few times a day', 'Take over-the-counter pain relievers', 'Perform gentle stretches if not too painful']
   }
 };
 
+const SYMPTOM_MAP: Record<string, string[]> = {
+  headache: ["headache", "migraine", "head pain", "pressure in head", "head hurts", "pounding head"],
+  fever: ["fever", "high temperature", "chills", "body heat", "feeling hot", "feverish"],
+  diarrhea: ["diarrhea", "loose motion", "loose motions", "loose stools", "watery stool", "running stomach", "the runs"],
+  stomach_pain: ["stomach pain", "abdominal pain", "gastric pain", "cramps", "belly ache", "tummy ache", "stomach hurts"],
+  chest_pain: ["chest pain", "tight chest", "heart pain", "pressure in chest", "chest tightness", "burning chest"],
+  shoulder_pain: ["shoulder pain", "shoulder stiffness", "rotator pain", "stiff shoulder", "shoulder ache"],
+  breathing_difficulty: ["shortness of breath", "breathing problem", "can't breathe", "breathless", "gasping", "wheezing", "trouble breathing"],
+  dizziness: ["dizzy", "lightheaded", "faint", "vertigo", "spinning", "dizzyness", "passing out"],
+  cough: ["cough", "coughing", "hacking", "chesty cough", "dry cough"],
+  skin_rash: ["rash", "skin issue", "itchy", "hives", "red spots", "itch"]
+};
+
+function normalizeText(text: string): string {
+  let normalized = text.toLowerCase();
+  normalized = normalized.replace(/[^\w\s]/gi, ''); // Remove punctuation
+  normalized = normalized.replace(/\s+/g, ' ').trim(); // Collapse multiple spaces
+  
+  // Custom normalization for known variations
+  normalized = normalized.replace(/\bloose motions\b/g, 'loose motion');
+  normalized = normalized.replace(/\bdizzyness\b/g, 'dizziness');
+  
+  return normalized;
+}
+
 export const triageEngine = {
-  analyzeText(text: string): { keywords: string[], questions: Question[] } {
-    const t = text.toLowerCase();
-    const keywords: string[] = [];
+  analyzeText(text: string): { keywords: string[], questions: Question[], isFallback: boolean } {
+    const normalized = normalizeText(text);
+    const keywordsSet: Set<string> = new Set();
+    
+    // Priority matching
+    for (const [symptomKey, phrases] of Object.entries(SYMPTOM_MAP)) {
+      for (const phrase of phrases) {
+        if (normalized.includes(phrase)) {
+          keywordsSet.add(symptomKey);
+        }
+      }
+    }
+
+    const keywords = Array.from(keywordsSet);
+    const isFallback = keywords.length === 0;
+
     const questions: Question[] = [];
-
-    // Map to normalized categories
-    if (t.includes('head') || t.includes('headache') || t.includes('migraine')) keywords.push('headache');
-    else if (t.includes('fever') || t.includes('temperature') || t.includes('hot')) keywords.push('fever');
-    else if (t.includes('chest') || t.includes('heart')) keywords.push('chest_pain');
-    else if (t.includes('cough')) keywords.push('cough');
-    else if (t.includes('breathe') || t.includes('breath') || t.includes('shortness')) keywords.push('breathing_difficulty');
-    else if (t.includes('stomach') || t.includes('belly') || t.includes('abdomen') || t.includes('pain')) keywords.push('stomach_pain');
-    else if (t.includes('dizz') || t.includes('lightheaded') || t.includes('faint')) keywords.push('dizziness');
-    else if (t.includes('rash') || t.includes('skin') || t.includes('itch')) keywords.push('skin_rash');
-
-    // Always ask generic questions to ensure we have duration and severity
-    questions.push({ id: 'duration', text: 'How long have you had these symptoms?', options: ['1 day', '1-3 days', 'More than 3 days'] });
+    questions.push({ id: 'duration', text: 'How long have you had these symptoms?', options: ['1 day or less', '1-3 days', 'More than 3 days'] });
     questions.push({ id: 'severity', text: 'How severe is your condition?', options: ['Mild', 'Moderate', 'Severe'] });
 
-    return { keywords, questions };
+    return { keywords, questions, isFallback };
   },
 
-  calculateResult(keywords: string[], answers: Record<string, string>, context: UserContext): TriageResult {
-    const symptom = keywords[0] || 'Unknown';
-    const duration = answers['duration'] || '1 day';
+  calculateResult(keywords: string[], answers: Record<string, string>, context: UserContext, isFallback: boolean): TriageResult {
+    const duration = answers['duration'] || '1 day or less';
     const severity = answers['severity'] || 'Mild';
     
     const age = parseInt(context.age) || 30;
     const history = (context.history || '').toLowerCase();
     const hasExistingCondition = history.length > 3 && history !== 'none' && history !== 'no';
-    const hasHypertension = history.includes('hypertension') || history.includes('blood pressure');
-    const hasDiabetes = history.includes('diabetes');
+
+    // Contextual Weighting Engine
+    let score = 0;
+
+    if (severity === 'Severe') score += 2;
+    if (severity === 'Moderate') score += 1;
+    if (duration === 'More than 3 days') score += 2;
+    if (age > 50) score += 1;
+    if (hasExistingCondition) score += 2;
+    if (keywords.length > 1) score += 1; // Multi-symptom risk
+
+    // Hard overrides for critical symptoms
+    if (keywords.includes('chest_pain') || keywords.includes('breathing_difficulty')) {
+      score = Math.max(score, 9); // Force to Red
+    }
 
     let urgencyLevel = 0; // 0=Green, 1=Yellow, 2=Orange, 3=Red
+    if (score >= 9) urgencyLevel = 3;
+    else if (score >= 6) urgencyLevel = 2;
+    else if (score >= 3) urgencyLevel = 1;
+    else urgencyLevel = 0;
 
-    // A. Triage Logic (MANDATORY RULES)
-    const isRed = 
-      symptom === 'chest_pain' || 
-      symptom === 'breathing_difficulty' || 
-      (symptom === 'dizziness' && age > 50 && hasHypertension) ||
-      (severity === 'Severe' && hasExistingCondition);
-
-    const isOrange = 
-      !isRed && 
-      ((['Moderate', 'Severe'].includes(severity) && hasExistingCondition) || duration === 'More than 3 days');
-
-    const isYellow = 
-      !isRed && !isOrange && 
-      (['Mild', 'Moderate'].includes(severity) && !hasExistingCondition && ['1 day', '1-3 days'].includes(duration));
-
-    const isGreen = 
-      !isRed && !isOrange && !isYellow && 
-      (severity === 'Mild' && duration === '1 day' && !hasExistingCondition);
-
-    if (isRed) urgencyLevel = 3;
-    else if (isOrange) urgencyLevel = 2;
-    else if (isYellow) urgencyLevel = 1;
-    else if (isGreen) urgencyLevel = 0; // fallback is Green/Yellow depending on inputs. We will assign 0 for green.
-    else urgencyLevel = 1; // Default fallback to yellow
-
-    // Alert Generation
-    let alert = '';
-    if (symptom === 'dizziness' && hasHypertension && duration !== '1 day') {
-      alert = 'You have a history of hypertension. Dizziness for multiple days may indicate blood pressure fluctuation. Check BP immediately.';
-    } else if (hasDiabetes && symptom === 'fever') {
-      alert = 'Fever in diabetic patients can affect blood sugar levels. Monitor your glucose closely.';
+    // Fallback Mode Safety
+    let alertText = '';
+    if (isFallback) {
+      urgencyLevel = Math.max(urgencyLevel, 1); // Fallback never gives Green
+      alertText = "We couldn't fully identify your symptoms from the text. Please consult a doctor for a precise diagnosis.";
     }
-
-    // B. Condition Mapping
-    const conditions: Condition[] = [];
-
-    if (symptom === 'headache') {
-      if (severity === 'Severe') {
-        conditions.push({ name: 'Migraine', confidence: 'Most likely', confidenceValue: 80, description: 'A severe throbbing pain or pulsing sensation.' });
-        conditions.push({ name: 'Tension Headache', confidence: 'Possible', confidenceValue: 60, description: 'Mild to moderate pain, often described as a tight band.' });
-        if (hasHypertension) conditions.push({ name: 'Hypertensive Crisis', confidence: 'Less likely', confidenceValue: 45, description: 'Severe elevation in blood pressure causing headache.' });
-        else conditions.push({ name: 'Sinusitis', confidence: 'Less likely', confidenceValue: 40, description: 'Inflammation of the sinuses causing facial pain and headache.' });
-      } else {
-        conditions.push({ name: 'Tension Headache', confidence: 'Most likely', confidenceValue: 75, description: 'Common diffuse, mild to moderate pain in your head.' });
-        conditions.push({ name: 'Dehydration', confidence: 'Possible', confidenceValue: 65, description: 'Lack of adequate fluids leading to headache.' });
-        conditions.push({ name: 'Sinusitis', confidence: 'Less likely', confidenceValue: 45, description: 'Inflammation of the sinuses causing facial pain.' });
-      }
-    } else if (symptom === 'chest_pain') {
-      if (hasDiabetes || hasHypertension || age > 50) {
-        conditions.push({ name: 'Angina or Ischemia', confidence: 'Most likely', confidenceValue: 80, description: 'Reduced blood flow to the heart muscle.' });
-        conditions.push({ name: 'Acid Reflux / GERD', confidence: 'Possible', confidenceValue: 55, description: 'Stomach acid flowing back into the esophagus.' });
-        conditions.push({ name: 'Muscle Strain', confidence: 'Less likely', confidenceValue: 35, description: 'Strain of the muscles in the chest wall.' });
-      } else {
-        conditions.push({ name: 'Muscle Strain', confidence: 'Most likely', confidenceValue: 75, description: 'Strain of the muscles in the chest wall.' });
-        conditions.push({ name: 'Acid Reflux / GERD', confidence: 'Possible', confidenceValue: 65, description: 'Stomach acid flowing back into the esophagus.' });
-        conditions.push({ name: 'Angina', confidence: 'Less likely', confidenceValue: 30, description: 'Reduced blood flow to the heart muscle.' });
-      }
-    } else if (symptom === 'fever') {
-      conditions.push({ name: 'Viral Infection', confidence: 'Most likely', confidenceValue: 80, description: 'Common cold or seasonal viral illness.' });
-      conditions.push({ name: 'Influenza (Flu)', confidence: 'Possible', confidenceValue: 60, description: 'A common viral infection that can be severe.' });
-      if (duration === 'More than 3 days') {
-        conditions.push({ name: 'Bacterial Infection', confidence: 'Less likely', confidenceValue: 45, description: 'Infection requiring antibiotic treatment.' });
-      } else {
-        conditions.push({ name: 'Infection-related illness', confidence: 'Less likely', confidenceValue: 35, description: 'Body fighting off a mild pathogen.' });
-      }
-    } else if (symptom === 'dizziness') {
-      if (hasHypertension) {
-        conditions.push({ name: 'Blood Pressure Fluctuation', confidence: 'Most likely', confidenceValue: 85, description: 'Changes in systemic blood pressure.' });
-        conditions.push({ name: 'Medication Side Effect', confidence: 'Possible', confidenceValue: 65, description: 'Adverse reaction to prescribed drugs.' });
-        conditions.push({ name: 'Dehydration', confidence: 'Less likely', confidenceValue: 40, description: 'Lack of sufficient bodily fluids.' });
-      } else {
-        conditions.push({ name: 'Vertigo / Inner Ear Issue', confidence: 'Most likely', confidenceValue: 75, description: 'Balance disorder originating in the inner ear.' });
-        conditions.push({ name: 'Dehydration', confidence: 'Possible', confidenceValue: 60, description: 'Lack of sufficient bodily fluids.' });
-        conditions.push({ name: 'Hypoglycemia', confidence: 'Less likely', confidenceValue: 45, description: 'Low blood sugar levels.' });
-      }
-    } else if (symptom === 'stomach_pain') {
-      conditions.push({ name: 'Gastroenteritis', confidence: 'Most likely', confidenceValue: 75, description: 'Intestinal infection causing inflammation.' });
-      conditions.push({ name: 'Indigestion / Acid Reflux', confidence: 'Possible', confidenceValue: 60, description: 'Discomfort in the upper abdomen.' });
-      conditions.push({ name: 'Food Poisoning', confidence: 'Less likely', confidenceValue: 45, description: 'Illness caused by eating contaminated food.' });
-    } else if (symptom === 'breathing_difficulty') {
-      conditions.push({ name: 'Asthma Exacerbation', confidence: 'Most likely', confidenceValue: 70, description: 'Airways narrow and swell, producing extra mucus.' });
-      conditions.push({ name: 'Respiratory Infection', confidence: 'Possible', confidenceValue: 65, description: 'Infection of the lungs or airways.' });
-      conditions.push({ name: 'Anxiety / Panic Attack', confidence: 'Less likely', confidenceValue: 40, description: 'Sudden episode of intense fear triggering severe physical reactions.' });
-    } else if (symptom === 'cough') {
-      conditions.push({ name: 'Upper Respiratory Infection', confidence: 'Most likely', confidenceValue: 80, description: 'Common cold or upper airway viral infection.' });
-      conditions.push({ name: 'Bronchitis', confidence: 'Possible', confidenceValue: 60, description: 'Inflammation of the lining of your bronchial tubes.' });
-      conditions.push({ name: 'Allergies', confidence: 'Less likely', confidenceValue: 40, description: 'Immune system reaction to an allergen.' });
-    } else if (symptom === 'skin_rash') {
-      conditions.push({ name: 'Contact Dermatitis', confidence: 'Most likely', confidenceValue: 75, description: 'Red, itchy rash caused by direct contact with a substance.' });
-      conditions.push({ name: 'Allergic Reaction', confidence: 'Possible', confidenceValue: 60, description: 'Systemic or local reaction to an allergen.' });
-      conditions.push({ name: 'Viral Exanthem', confidence: 'Less likely', confidenceValue: 45, description: 'Rash caused by a viral infection.' });
-    }
-
-    // Assembly
-    const baseSymptomData = SYMPTOM_DATA[symptom] || { redFlags: [], homeCare: [] };
-    const readableSymptom = symptom.replace('_', ' ');
 
     let levelTitle: 'Emergency' | 'Urgent' | 'Moderate' | 'Low' = 'Low';
     let colorClass: 'red' | 'orange' | 'yellow' | 'green' = 'green';
@@ -222,20 +183,73 @@ export const triageEngine = {
       actionObj = { type: 'home', text: 'Home care sufficient' };
     }
 
+    // Dynamic Differential Diagnosis
+    const conditions: Condition[] = [];
+
+    if (isFallback) {
+      conditions.push({ name: 'Unspecified Medical Condition', confidence: 'Possible', confidenceValue: 50, description: 'Symptom matching was inconclusive. Please describe your symptoms directly to a healthcare professional.' });
+    } else {
+      // Loop through all detected symptoms to build possible conditions
+      if (keywords.includes('headache')) {
+        conditions.push({ name: 'Tension Headache', confidence: 'Possible', confidenceValue: severity === 'Severe' ? 50 : 70, description: 'Common diffuse, mild to moderate pain in your head.' });
+        if (severity === 'Severe') conditions.push({ name: 'Migraine', confidence: 'Possible', confidenceValue: 65, description: 'A severe throbbing pain or pulsing sensation.' });
+      }
+      if (keywords.includes('fever') && keywords.includes('diarrhea')) {
+        conditions.push({ name: 'Gastroenteritis (Stomach Flu)', confidence: 'Possible', confidenceValue: 75, description: 'Intestinal infection causing inflammation, fever, and diarrhea.' });
+      } else if (keywords.includes('fever')) {
+        conditions.push({ name: 'Viral Infection', confidence: 'Possible', confidenceValue: 60, description: 'Common viral illness or flu.' });
+      } else if (keywords.includes('diarrhea')) {
+        conditions.push({ name: 'Food Poisoning', confidence: 'Less likely', confidenceValue: 45, description: 'Illness caused by eating contaminated food.' });
+      }
+      if (keywords.includes('shoulder_pain')) {
+        if (keywords.includes('chest_pain')) {
+          conditions.push({ name: 'Referred Cardiac Pain', confidence: 'Possible', confidenceValue: 80, description: 'Pain originating from the heart felt in the shoulder.' });
+        } else {
+          conditions.push({ name: 'Frozen Shoulder / Muscle Strain', confidence: 'Possible', confidenceValue: 65, description: 'Stiffness and pain in your shoulder joint.' });
+        }
+      }
+      if (keywords.includes('dizziness')) {
+        if (history.includes('hypertension') || history.includes('blood pressure')) {
+          conditions.push({ name: 'Blood Pressure Fluctuation', confidence: 'Possible', confidenceValue: 70, description: 'Changes in systemic blood pressure.' });
+        } else {
+          conditions.push({ name: 'Vertigo / Dehydration', confidence: 'Less likely', confidenceValue: 50, description: 'Balance disorder or lack of sufficient bodily fluids.' });
+        }
+      }
+      if (keywords.includes('chest_pain')) {
+        conditions.push({ name: 'Angina or Cardiac Event', confidence: 'Possible', confidenceValue: 70, description: 'Reduced blood flow to the heart muscle. Requires immediate evaluation.' });
+        conditions.push({ name: 'Acid Reflux / GERD', confidence: 'Less likely', confidenceValue: 40, description: 'Stomach acid flowing back into the esophagus.' });
+      }
+      
+      if (conditions.length === 0) {
+        conditions.push({ name: 'General Medical Condition', confidence: 'Possible', confidenceValue: 50, description: 'Further evaluation is needed to determine the exact cause.' });
+      }
+    }
+
+    // Merge red flags and home care from multiple symptoms
+    const allRedFlags = new Set<string>();
+    const allHomeCare = new Set<string>();
+    
+    keywords.forEach(kw => {
+      if (SYMPTOM_DATA[kw]) {
+        SYMPTOM_DATA[kw].redFlags.forEach(f => allRedFlags.add(f));
+        SYMPTOM_DATA[kw].homeCare.forEach(h => allHomeCare.add(h));
+      }
+    });
+
     return { 
       level: levelTitle, 
       color: colorClass, 
-      conditions: conditions.slice(0, 3).sort((a,b)=> b.confidenceValue - a.confidenceValue), 
-      alert: alert || undefined,
-      redFlags: baseSymptomData.redFlags,
-      homeCare: baseSymptomData.homeCare,
+      conditions: conditions.sort((a,b)=> b.confidenceValue - a.confidenceValue).slice(0, 4), 
+      alert: alertText || undefined,
+      redFlags: Array.from(allRedFlags).slice(0, 5),
+      homeCare: Array.from(allHomeCare).slice(0, 5),
       action: actionObj,
       parsedContext: {
-        symptom: readableSymptom.charAt(0).toUpperCase() + readableSymptom.slice(1),
+        symptoms: keywords.length > 0 ? keywords.map(k => k.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())) : ['Unspecified'],
         duration: duration,
         severity: severity
-      }
+      },
+      isFallback
     };
   }
 };
-

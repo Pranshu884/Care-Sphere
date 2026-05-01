@@ -9,7 +9,9 @@ const UserSchema = new mongoose.Schema(
     passwordHash: { type: String, required: true, select: false },
 
     age: { type: Number, required: true, min: 1, max: 120 },
-    gender: { type: String, required: true, enum: ['male', 'female', 'other', 'prefer-not'] },
+    dob: { type: String, default: '' },
+    gender: { type: String, required: true, enum: ['male', 'female', 'other', 'prefer-not', 'Male', 'Female'] },
+    city: { type: String, default: '' },
 
     emailVerified: { type: Boolean, default: false },
 
@@ -17,9 +19,11 @@ const UserSchema = new mongoose.Schema(
     doctorProfileId: { type: mongoose.Schema.Types.ObjectId, ref: 'Doctor' },
     isBlocked: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
-
+    // Emergency Quick Profile
     // Emergency Quick Profile
     bloodGroup: { type: String, default: '' },
+    height: { type: Number },
+    weight: { type: Number },
     allergies: { type: [String], default: [] },
     chronicDiseases: { type: [String], default: [] },
     majorSurgeries: { type: [String], default: [] },

@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, ChevronRight, Activity, HeartPulse, User, Clock, AlertCircle, ShieldAlert } from 'lucide-react';
 import { triageEngine, type Question, type TriageResult, type UserContext } from '../lib/triageEngine';
+import { getSessionUser } from '../lib/auth';
+import Select from '../components/ui/Select';
 
 export default function SymptomChecker() {
   const navigate = useNavigate();
@@ -14,8 +16,32 @@ export default function SymptomChecker() {
   const [qIndex, setQIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [context, setContext] = useState<UserContext>({ age: '', gender: '', history: '' });
+  const [originalContext, setOriginalContext] = useState<{age: string, gender: string} | null>(null);
   const [result, setResult] = useState<TriageResult | null>(null);
+
+  useEffect(() => {
+    const user = getSessionUser();
+    if (user) {
+      const ageStr = user.age ? String(user.age) : '';
+      let genderStr = user.gender ? String(user.gender).toLowerCase() : '';
+      
+      if (genderStr === 'male') genderStr = 'Male';
+      else if (genderStr === 'female') genderStr = 'Female';
+      else genderStr = '';
+
+      if (ageStr || genderStr) {
+        setContext(prev => ({ ...prev, age: ageStr, gender: genderStr }));
+        setOriginalContext({ age: ageStr, gender: genderStr });
+      }
+    }
+  }, []);
+
+  const isAgeAutoFilled = originalContext?.age && context.age === originalContext.age;
+  const isGenderAutoFilled = originalContext?.gender && context.gender === originalContext.gender;
+  const isAgeEdited = originalContext?.age && context.age !== originalContext.age;
+  const isGenderEdited = originalContext?.gender && context.gender !== originalContext.gender;
   const [showAdvice, setShowAdvice] = useState(false);
+  const [isFallback, setIsFallback] = useState(false);
 
   const handleTextSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,9 +53,10 @@ export default function SymptomChecker() {
       return;
     }
     setValidationError('');
-    const { keywords: kw, questions: qs } = triageEngine.analyzeText(text);
+    const { keywords: kw, questions: qs, isFallback: fallback } = triageEngine.analyzeText(text);
     setKeywords(kw);
     setQuestions(qs);
+    setIsFallback(fallback);
     if (qs.length > 0) { setStep(2); setQIndex(0); } else { setStep(3); }
   };
 
@@ -42,15 +69,16 @@ export default function SymptomChecker() {
 
   const handleContextSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const res = triageEngine.calculateResult(keywords, answers, context);
+    const res = triageEngine.calculateResult(keywords, answers, context, isFallback);
     setResult(res);
     setStep(4);
   };
 
   const reset = () => {
     setStep(1); setText(''); setValidationError(''); setKeywords([]);
-    setQuestions([]); setAnswers({}); setContext({ age: '', gender: '', history: '' });
-    setResult(null); setShowAdvice(false);
+    setQuestions([]); setAnswers({}); 
+    setContext({ age: originalContext?.age || '', gender: originalContext?.gender || '', history: '' });
+    setResult(null); setShowAdvice(false); setIsFallback(false);
   };
 
   const urgencyColor = result?.color === 'red' ? 'border-red-500/40 bg-red-500/5' :
@@ -118,6 +146,34 @@ export default function SymptomChecker() {
             </form>
           )}
 
+          {/* STEP 2 & 3 Headers (Chips) */}
+          {(step === 2 || step === 3) && (
+            <div className="px-8 pt-8 pb-2 border-b border-white/5">
+              <h3 className="text-xs font-bold text-muted uppercase tracking-widest mb-3">Detected Symptoms</h3>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {keywords.length > 0 ? keywords.map(kw => (
+                  <div key={kw} className="px-3 py-1.5 bg-primary/10 border border-primary/20 text-primary rounded-full text-sm font-medium capitalize flex items-center gap-1 shadow-[0_0_10px_rgba(0,212,255,0.1)]">
+                    {kw.replace('_', ' ')}
+                  </div>
+                )) : (
+                  <div className="px-3 py-1.5 bg-white/5 border border-white/10 text-muted rounded-full text-sm font-medium">
+                    None identified
+                  </div>
+                )}
+                <button onClick={() => setStep(1)} className="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-full text-sm font-medium transition-colors">
+                  ✎ Edit
+                </button>
+              </div>
+              
+              {isFallback && (
+                <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-200 text-sm flex items-start gap-3 mb-4 leading-relaxed">
+                  <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-amber-400" />
+                  <p>We couldn't precisely map your input to our core symptom database. We will proceed with a general evaluation, but please consult a doctor for an accurate diagnosis.</p>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* STEP 2 */}
           {step === 2 && questions.length > 0 && (
             <div className="p-8">
@@ -149,16 +205,30 @@ export default function SymptomChecker() {
               <div className="space-y-5">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-muted mb-1.5">Age</label>
+                    <label className="flex items-center justify-between text-sm font-medium text-muted mb-1.5">
+                      <span>Age</span>
+                      {isAgeAutoFilled && <span className="text-xs text-primary/70 font-normal px-2 py-0.5 rounded-full bg-primary/10">Auto-filled</span>}
+                      {isAgeEdited && <span className="text-xs text-amber-500/70 font-normal px-2 py-0.5 rounded-full bg-amber-500/10">Edited</span>}
+                    </label>
                     <input type="number" required value={context.age} onChange={e => setContext({ ...context, age: e.target.value })} className="premium-input" placeholder="e.g. 34" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-muted mb-1.5">Gender</label>
-                    <select required value={context.gender} onChange={e => setContext({ ...context, gender: e.target.value })} className="premium-input [&>option]:text-slate-900">
-                      <option value="">Select...</option>
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                    </select>
+                    <label className="flex items-center justify-between text-sm font-medium text-muted mb-1.5">
+                      <span>Gender</span>
+                      {isGenderAutoFilled && <span className="text-xs text-primary/70 font-normal px-2 py-0.5 rounded-full bg-primary/10">Auto-filled</span>}
+                      {isGenderEdited && <span className="text-xs text-amber-500/70 font-normal px-2 py-0.5 rounded-full bg-amber-500/10">Edited</span>}
+                    </label>
+                    <Select 
+                      required 
+                      value={context.gender} 
+                      onChange={val => setContext({ ...context, gender: val })} 
+                      options={[
+                        { value: 'Male', label: 'Male' },
+                        { value: 'Female', label: 'Female' }
+                      ]}
+                      placeholder="Select..."
+                      className="w-full"
+                    />
                   </div>
                 </div>
 
@@ -183,7 +253,7 @@ export default function SymptomChecker() {
                   <User className="w-3.5 h-3.5" /> {context.age} y/o {context.gender}
                 </div>
                 <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/5 border border-white/10 rounded-full text-xs font-semibold text-muted">
-                  <Activity className="w-3.5 h-3.5 text-primary" /> {result.parsedContext.symptom}
+                  <Activity className="w-3.5 h-3.5 text-primary" /> {result.parsedContext.symptoms.join(', ')}
                 </div>
                 <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/5 border border-white/10 rounded-full text-xs font-semibold text-muted">
                   <Clock className="w-3.5 h-3.5 text-amber-400" /> {result.parsedContext.duration}
@@ -293,11 +363,13 @@ export default function SymptomChecker() {
                 {showAdvice && (
                   <div className="mt-4 p-4 rounded-xl bg-white/5 border border-white/10 text-sm text-muted leading-relaxed">
                     <p className="mb-3 text-muted/70">Read this summary to your doctor or at the front desk:</p>
-                    <ul className="list-disc pl-5 space-y-1.5 marker:text-primary">
-                      <li>I am experiencing <strong className="text-white">{result.parsedContext.symptom.toLowerCase()}</strong>.</li>
-                      <li>It has been going on for <strong className="text-white">{result.parsedContext.duration.toLowerCase()}</strong> and feels <strong className="text-white">{result.parsedContext.severity.toLowerCase()}</strong>.</li>
-                      {context.history && <li>My medical history includes: <strong className="text-white">{context.history}</strong>.</li>}
-                    </ul>
+                    <div className="bg-black/20 p-4 rounded-lg font-mono text-white/90 border border-white/5">
+                      Patient reports {result.parsedContext.symptoms.join(', ').toLowerCase()} for {result.parsedContext.duration.toLowerCase()} with {result.parsedContext.severity.toLowerCase()} severity.
+                      <br/><br/>
+                      Medical history includes: {context.history || 'None reported'}.
+                      <br/><br/>
+                      Urgency level assessed as {result.level}.
+                    </div>
                   </div>
                 )}
 

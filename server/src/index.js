@@ -9,6 +9,7 @@ import adminRoutes from './routes/adminRoutes.js';
 import doctorRoutes from './routes/doctorRoutes.js';
 import appointmentRoutes from './routes/appointmentRoutes.js';
 import medicineRoutes from './routes/medicineRoutes.js';
+import userRoutes from './routes/userRoutes.js';
 import authMiddleware from './middleware/authMiddleware.js';
 import { startMedicineScheduler } from './services/medicineScheduler.js';
 
@@ -27,12 +28,32 @@ app.use('/api/auth', authRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/doctor', doctorRoutes);
+app.use('/api/user', userRoutes);
 app.use('/api/user/appointments', appointmentRoutes);
 app.use('/api/medicines', authMiddleware, medicineRoutes);
 
 const port = Number(process.env.PORT || 4000);
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`[care-sphere-otp] listening on port ${port}`);
   startMedicineScheduler();
+});
+
+// Friendly EADDRINUSE message instead of ugly stack trace
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n❌ Port ${port} is already in use.`);
+    console.error(`   Run this to free it:  npx kill-port ${port}\n`);
+    process.exit(1);
+  } else {
+    throw err;
+  }
+});
+
+// Prevent background AI/scheduler crashes from killing the server
+process.on('uncaughtException', (err) => {
+  console.error('[UNCAUGHT EXCEPTION] Server kept alive:', err.message);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[UNHANDLED REJECTION] Server kept alive:', reason);
 });
 

@@ -38,11 +38,15 @@ function toPublicUser(u) {
     updatedAt: u.updatedAt,
     // Emergency Profile
     bloodGroup: u.bloodGroup || '',
+    height: u.height,
+    weight: u.weight,
     allergies: u.allergies || [],
     chronicDiseases: u.chronicDiseases || [],
     majorSurgeries: u.majorSurgeries || [],
     currentMedications: u.currentMedications || [],
-    emergencyContact: u.emergencyContact || { name: '', phone: '' }
+    emergencyContact: u.emergencyContact || { name: '', phone: '' },
+    dob: u.dob || '',
+    city: u.city || ''
   };
 }
 
@@ -333,6 +337,42 @@ async function resetPassword({ email, otp, newPassword }) {
   return { status: 200, body: { success: true, code: 'password_reset', message: 'Password reset successful.' } };
 }
 
+async function changePassword({ userId, currentPassword, newPassword }) {
+  await connectMongo();
+  const user = await User.findById(userId).select('+passwordHash');
+  if (!user) {
+    return { status: 404, body: { success: false, message: 'User not found.' } };
+  }
+
+  const isMatch = await bcrypt.compare(String(currentPassword), user.passwordHash);
+  if (!isMatch) {
+    return { status: 400, body: { success: false, message: 'Incorrect current password.' } };
+  }
+
+  if (!newPassword || String(newPassword).length < 8) {
+    return { status: 400, body: { success: false, message: 'New password must be at least 8 characters long.' } };
+  }
+
+  user.passwordHash = await bcrypt.hash(String(newPassword), getSaltRounds());
+  await user.save();
+
+  return { status: 200, body: { success: true, message: 'Password changed successfully.' } };
+}
+
+async function verifyCurrentPassword({ userId, currentPassword }) {
+  await connectMongo();
+  const user = await User.findById(userId).select('+passwordHash');
+  if (!user) {
+    return { status: 404, body: { success: false, message: 'User not found.' } };
+  }
+  const isMatch = await bcrypt.compare(String(currentPassword || ''), user.passwordHash);
+  if (!isMatch) {
+    return { status: 400, body: { success: false, code: 'incorrect_password', message: 'Incorrect password.' } };
+  }
+  return { status: 200, body: { success: true } };
+}
+
+
 const authService = {
   registerUserAndSendOtp,
   verifyEmailOtpAndActivate,
@@ -344,6 +384,8 @@ const authService = {
   logout,
   forgotPassword,
   resetPassword,
+  changePassword,
+  verifyCurrentPassword,
 };
 
 export default authService;

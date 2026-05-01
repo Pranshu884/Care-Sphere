@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { apiGet, apiPatch, apiDelete } from '../../lib/api';
 import { Users, UserPlus, Calendar, CheckCircle, XCircle, Search, Check, X, LayoutDashboard, Stethoscope, Clock, Activity, Target, Shield, Award } from 'lucide-react';
+import Select from '../../components/ui/Select';
 
 function getInitials(name: string) {
   if (!name || name.trim() === '') return 'U';
@@ -238,7 +239,7 @@ export default function AdminDashboard() {
                   <h2 className="text-[13px] font-medium text-[#8b92a5]">Recent Activity Stream</h2>
                 </div>
                 <div className="bg-[#13151e] border border-[#1e2130] rounded-[10px] p-2 flex flex-col min-h-[350px]">
-                  {recentActivities.map((act, i) => (
+                  {recentActivities.map((act) => (
                     <div key={act.id} className="flex items-center justify-between p-3 rounded-[8px] hover:bg-white/[0.02] transition-colors border border-transparent">
                       <div className="flex items-center gap-4">
                         <div className={`w-10 h-10 rounded-[6px] ${act.bg} flex items-center justify-center ${act.color}`}>
@@ -537,17 +538,20 @@ export default function AdminDashboard() {
                     className="w-56 bg-[#13151e] border border-[#1e2130] rounded-[8px] pl-9 pr-4 py-2 text-[13px] text-white placeholder-[#585f73] focus:outline-none focus:border-[#1a7fe0]/50 transition-colors"
                   />
                 </div>
-                <select
-                  value={apptStatus}
-                  onChange={e => setApptStatus(e.target.value)}
-                  className="bg-[#13151e] border border-[#1e2130] rounded-[8px] px-4 py-2 text-[13px] text-white focus:outline-none focus:border-[#1a7fe0]/50 transition-colors [&>option]:bg-[#13151e]"
-                >
-                  <option value="All">All Events</option>
-                  <option value="pending">Pending</option>
-                  <option value="accepted">Accepted</option>
-                  <option value="completed">Completed</option>
-                  <option value="rejected">Rejected</option>
-                </select>
+                <div className="z-40">
+                  <Select
+                    value={apptStatus}
+                    onChange={val => setApptStatus(val)}
+                    options={[
+                      { value: 'All', label: 'All Events' },
+                      { value: 'pending', label: 'Pending' },
+                      { value: 'accepted', label: 'Accepted' },
+                      { value: 'completed', label: 'Completed' },
+                      { value: 'rejected', label: 'Rejected' }
+                    ]}
+                    className="w-48 bg-[#13151e]"
+                  />
+                </div>
               </div>
             </div>
 

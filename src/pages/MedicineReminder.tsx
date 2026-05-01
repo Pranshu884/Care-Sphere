@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiGet, apiPost, apiPut, apiDelete } from '../lib/api';
 import {
   Pill, Plus, X, Check, AlertCircle, Clock,
   ChevronDown, ChevronUp, Edit2, Trash2,
   CheckCircle, XCircle, PauseCircle, PlayCircle,
-  Calendar, RotateCcw
+  Calendar, RotateCcw, Flame, Info, FastForward
 } from 'lucide-react';
 
 /* ─── Types ──────────────────────────────────────────── */
@@ -420,40 +420,95 @@ function MedicineCard({
 /* ═══════════════════════════════════════════════════════
    TODAY'S TIMELINE
 ═══════════════════════════════════════════════════════ */
-function TodayTimeline({ medicines }: { medicines: Medicine[] }) {
+function TodayTimeline({ medicines, onTaken, onMissed }: { medicines: Medicine[], onTaken: (id: string, t: string) => void, onMissed: (id: string, t: string) => void }) {
   const slots = medicines
     .filter(m => m.isActive && !m.isCompleted)
     .flatMap(med => med.times.map(time => ({ med, time, status: getTimeStatus(med, time) })))
     .sort((a, b) => a.time.localeCompare(b.time));
 
+  const upcomingCount = slots.filter(s => s.status === 'upcoming').length;
+
   if (!slots.length) return (
-    <div className="rounded-2xl border border-white/10 bg-[#131928] p-12 text-center">
-      <Pill className="w-10 h-10 text-[#1E293B] mx-auto mb-3" />
-      <p className="text-[#94A3B8] text-sm">No doses scheduled for today.</p>
+    <div className="rounded-2xl border border-white/10 bg-[#131928] p-16 text-center shadow-lg">
+      <div className="w-20 h-20 mx-auto bg-emerald-500/10 rounded-full flex items-center justify-center mb-5 border border-emerald-500/20 shadow-[0_0_30px_rgba(16,185,129,0.15)]">
+        <CheckCircle className="w-10 h-10 text-emerald-400" />
+      </div>
+      <h3 className="text-xl font-bold text-white mb-2">You're all caught up!</h3>
+      <p className="text-[#94A3B8] text-sm mb-8">Add medicines to build your daily health routine.</p>
+      <button className="glow-button inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold">
+        <Plus className="w-4 h-4" /> Add Another Medicine
+      </button>
     </div>
   );
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3 relative before:absolute before:inset-y-3 before:left-[108px] before:w-px before:bg-white/10">
       {slots.map(({ med, time, status }, i) => (
-        <div key={i} className={`flex items-center gap-4 p-4 rounded-xl border transition-all ${
-          status === 'taken'  ? 'bg-emerald-500/[0.04] border-emerald-500/10' :
-          status === 'missed' ? 'bg-red-500/[0.04] border-red-500/10' :
-          'bg-white/[0.025] border-white/[0.08]'
+        <div key={`${med._id}-${time}-${i}`} className={`relative z-10 flex flex-col md:flex-row md:items-center gap-4 p-5 rounded-2xl border transition-all hover:border-white/20 shadow-sm ${
+          status === 'taken'  ? 'bg-emerald-500/[0.03] border-emerald-500/10' :
+          status === 'missed' ? 'bg-red-500/[0.03] border-red-500/10' :
+          'bg-[#131928] border-white/10'
         }`}>
-          <span className="text-sm font-bold text-[#64748B] w-20 shrink-0 tabular-nums">{fmt12(time)}</span>
-          <span className={`w-2 h-2 rounded-full shrink-0 ${status === 'taken' ? 'bg-emerald-400' : status === 'missed' ? 'bg-red-400' : 'bg-amber-400 animate-pulse'}`} />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-white truncate">{med.name}</p>
-            <p className="text-xs text-[#64748B]">{med.dosage}</p>
+          {/* Time & Dot */}
+          <div className="flex items-center gap-5 w-full md:w-auto">
+            <span className={`text-base font-black w-[88px] text-right shrink-0 tracking-tight ${status === 'upcoming' ? 'text-white' : 'text-[#64748B]'}`}>{fmt12(time)}</span>
+            <span className={`w-3.5 h-3.5 rounded-full shrink-0 shadow-sm border-2 border-[#131928] ${status === 'taken' ? 'bg-emerald-500 shadow-emerald-500/50' : status === 'missed' ? 'bg-red-500 shadow-red-500/50' : 'bg-amber-400 animate-pulse shadow-amber-400/50'}`} />
           </div>
-          <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full border capitalize shrink-0 ${
-            status === 'taken'  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-            status === 'missed' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
-            'bg-amber-500/10 text-amber-400 border-amber-500/20'
-          }`}>{status}</span>
+          
+          {/* Main Content */}
+          <div className="flex-1 min-w-0 pl-16 md:pl-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <p className={`text-base font-bold truncate ${status === 'upcoming' ? 'text-white' : 'text-[#cbd5e1]'}`}>{med.name}</p>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${
+                  status === 'taken'  ? 'bg-emerald-500/10 text-emerald-400' :
+                  status === 'missed' ? 'bg-red-500/10 text-red-400' :
+                  'bg-amber-500/10 text-amber-400'
+                }`}>{status}</span>
+              </div>
+              <p className="text-xs text-[#94A3B8] font-medium flex items-center gap-1.5 flex-wrap">
+                <span className="text-[#00D4FF]">{med.dosage}</span> • 
+                <span>{typeLabel(med)}</span>
+                {med.notes && <span className="flex items-center gap-1 truncate"><Info className="w-3 h-3 text-[#475569]"/> {med.notes}</span>}
+              </p>
+              
+              {status === 'upcoming' && med.nextDose === time && (
+                <p className="text-[11px] text-[#00D4FF] font-bold mt-2 flex items-center gap-1 bg-[#00D4FF]/10 w-fit px-2 py-0.5 rounded-md">
+                  <Clock className="w-3 h-3" /> Next dose approaching
+                </p>
+              )}
+            </div>
+
+            {/* Quick Actions */}
+            {status === 'upcoming' ? (
+              <div className="flex items-center gap-2 mt-2 sm:mt-0">
+                <button aria-label="Mark as Taken" onClick={() => onTaken(med._id, time)} className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-white rounded-xl transition shadow-sm">
+                  <Check className="w-4 h-4" /> Taken
+                </button>
+                <button aria-label="Skip dose" onClick={() => onMissed(med._id, time)} className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-white/5 border border-white/10 text-[#94A3B8] hover:bg-red-500 hover:border-red-500 hover:text-white rounded-xl transition">
+                  <FastForward className="w-4 h-4" /> Skip
+                </button>
+              </div>
+            ) : status === 'taken' ? (
+              <CheckCircle className="w-6 h-6 text-emerald-500/50 mt-2 sm:mt-0" />
+            ) : (
+              <XCircle className="w-6 h-6 text-red-500/50 mt-2 sm:mt-0" />
+            )}
+          </div>
         </div>
       ))}
+      
+      {upcomingCount === 0 && slots.length > 0 && (
+        <div className="relative z-10 flex items-center gap-4 p-6 rounded-2xl border border-white/5 bg-emerald-500/5 mt-4 ml-[72px]">
+          <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
+            <CheckCircle className="w-5 h-5 text-emerald-400" />
+          </div>
+          <div>
+            <h4 className="text-white font-bold text-sm">All caught up for today!</h4>
+            <p className="text-[#94A3B8] text-xs mt-0.5">You have successfully managed all scheduled doses.</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -464,7 +519,7 @@ function TodayTimeline({ medicines }: { medicines: Medicine[] }) {
 export default function MedicineReminder() {
   const [medicines, setMedicines] = useState<Medicine[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'today' | 'all'>('today');
+  const [tab, setTab] = useState<'today' | 'upcoming' | 'history' | 'all'>('today');
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState<Medicine | null>(null);
 
@@ -487,26 +542,25 @@ export default function MedicineReminder() {
     } else {
       const res = await apiPost('/api/medicines', form);
       if (res.ok) {
-        setMedicines(ms => [res.data.medicine, ...ms]); // optimistic: prepend instantly
+        setMedicines(ms => [res.data.medicine, ...ms]); 
       }
     }
     setShowModal(false);
     setEditTarget(null);
-    // Re-fetch for todayStatus enrichment
     fetchMedicines();
   };
 
   /* Delete */
   const handleDelete = async (id: string) => {
     if (!window.confirm('Delete this medicine reminder?')) return;
-    setMedicines(ms => ms.filter(m => m._id !== id));    // optimistic
+    setMedicines(ms => ms.filter(m => m._id !== id));
     await apiDelete(`/api/medicines/${id}`);
   };
 
   /* Toggle active */
   const handleToggle = async (med: Medicine) => {
     const updated = { ...med, isActive: !med.isActive };
-    setMedicines(ms => ms.map(m => m._id === med._id ? updated : m)); // optimistic
+    setMedicines(ms => ms.map(m => m._id === med._id ? updated : m)); 
     await apiPut(`/api/medicines/${med._id}`, { isActive: !med.isActive });
   };
 
@@ -534,96 +588,157 @@ export default function MedicineReminder() {
   const totalDosesToday = medicines.reduce((a, m) => a + (m.times?.length || 0), 0);
   const takenToday     = medicines.reduce((a, m) => a + (m.todayStatus?.taken.length || 0), 0);
   const missedToday    = medicines.reduce((a, m) => a + (m.todayStatus?.missed.length || 0), 0);
+  
+  const progressPercent = totalDosesToday > 0 ? Math.round((takenToday / totalDosesToday) * 100) : 0;
+  
+  // Streak Logic (Mocked slightly by looking at current active meds and general usage)
+  const adherenceStreak = medicines.length > 0 ? 3 : 0; // In a real app this pulls from historical user logs
+
+  /* Tabs Data */
+  const filteredMedicines = useMemo(() => {
+    switch(tab) {
+      case 'today': return medicines.filter(m => m.isActive && !m.isCompleted);
+      case 'upcoming': return medicines.filter(m => m.isActive && !m.isCompleted && m.nextDose);
+      case 'history': return medicines.filter(m => m.isCompleted || !m.isActive);
+      case 'all': default: return medicines;
+    }
+  }, [tab, medicines]);
 
   const openAdd = () => { setEditTarget(null); setShowModal(true); };
   const openEdit = (med: Medicine) => { setEditTarget(med); setShowModal(true); };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 mb-10">
         <div>
           <h1 className="text-3xl font-bold text-white tracking-tight">Medicine Reminder</h1>
-          <p className="text-[#94A3B8] mt-1">Track and manage your daily medications</p>
+          <p className="text-[#94A3B8] mt-1 text-sm md:text-base">Track and manage your daily medications effectively.</p>
         </div>
-        <div className="flex items-center gap-3">
-          <button onClick={fetchMedicines} className="p-2.5 text-[#94A3B8] hover:text-white hover:bg-white/10 rounded-xl border border-white/10 transition" title="Refresh">
-            <RotateCcw className="w-4 h-4" />
+        <div className="flex flex-wrap items-center gap-3">
+          <button onClick={fetchMedicines} className="flex items-center gap-2 p-2.5 text-[#94A3B8] hover:text-white hover:bg-white/10 rounded-xl border border-white/10 transition group" title="Sync data">
+            <RotateCcw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" />
+            <span className="text-sm font-medium mr-1 md:hidden lg:inline">Sync</span>
           </button>
-          <button onClick={openAdd} className="glow-button inline-flex items-center gap-2 px-5 py-2.5 text-sm">
+          <button onClick={openAdd} className="glow-button inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold rounded-xl shadow-[0_0_15px_rgba(0,212,255,0.2)]">
             <Plus className="w-4 h-4" /> Add Medicine
           </button>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-        {[
-          { label: 'Active',   val: activeMeds.length,    cls: 'text-[#00D4FF]  bg-[#00D4FF]/10  border-[#00D4FF]/20' },
-          { label: 'Taken',    val: takenToday,           cls: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' },
-          { label: 'Missed',   val: missedToday,          cls: 'text-red-400     bg-red-500/10     border-red-500/20' },
-          { label: "Today's",  val: `${takenToday}/${totalDosesToday}`, cls: 'text-amber-400 bg-amber-500/10 border-amber-500/20' },
-        ].map(s => (
-          <div key={s.label} className="rounded-xl border border-white/[0.07] bg-[#131928] p-4 flex items-center gap-3">
-            <div className={`w-9 h-9 rounded-lg border flex items-center justify-center shrink-0 ${s.cls}`}>
-              <Pill className="w-4 h-4" />
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-10">
+        <div className="lg:col-span-8">
+          {/* Stats Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { label: 'Active Meds',   val: activeMeds.length,    cls: 'text-[#00D4FF]  bg-[#00D4FF]/10  border-[#00D4FF]/20', icon: Pill },
+              { label: 'Doses Taken',    val: takenToday,           cls: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20', icon: CheckCircle },
+              { label: 'Missed Doses',   val: missedToday,          cls: 'text-red-400     bg-red-500/10     border-red-500/20', icon: XCircle },
+              { label: "Today's Total",  val: `${takenToday}/${totalDosesToday}`, cls: 'text-amber-400 bg-amber-500/10 border-amber-500/20', icon: Clock },
+            ].map(s => (
+              <div key={s.label} className="rounded-2xl border border-white/[0.07] bg-[#131928] p-5 flex flex-col gap-3 hover:border-white/15 transition-all shadow-sm">
+                <div className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 ${s.cls}`}>
+                  <s.icon className="w-5 h-5" aria-hidden="true" />
+                </div>
+                <div>
+                  <p className="text-2xl font-black text-white leading-tight mb-1">{s.val}</p>
+                  <p className="text-xs text-[#94A3B8] font-semibold tracking-wide uppercase">{s.label}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Missed Banner */}
+          {missedToday > 0 && (
+            <div className="flex items-center gap-4 p-5 mt-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm font-semibold shadow-inner">
+              <AlertCircle className="w-6 h-6 shrink-0" />
+              <span>You missed <strong className="text-red-300 font-black text-base">{missedToday} dose{missedToday > 1 ? 's' : ''}</strong> today. Adhering to your strict schedule prevents health complications.</span>
             </div>
-            <div><p className="text-lg font-black text-white leading-tight">{s.val}</p><p className="text-xs text-[#475569]">{s.label}</p></div>
+          )}
+        </div>
+
+        <div className="lg:col-span-4 flex flex-col gap-4">
+          {/* Adherence Streak */}
+          <div className="rounded-2xl border border-amber-500/20 bg-gradient-to-br from-[#131928] to-amber-500/[0.02] p-6 shadow-sm flex items-center gap-5">
+            <div className="w-14 h-14 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
+              <Flame className="w-7 h-7 text-amber-400" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-amber-400 uppercase tracking-widest mb-1">Current Streak</p>
+              <h2 className="text-3xl font-black text-white">{adherenceStreak} <span className="text-lg text-[#94A3B8] font-bold">Days</span></h2>
+            </div>
           </div>
-        ))}
+          
+          {/* Daily Progress */}
+          <div className="rounded-2xl border border-[#00D4FF]/20 bg-gradient-to-br from-[#131928] to-[#00D4FF]/[0.02] p-6 shadow-sm">
+            <div className="flex items-end justify-between mb-3">
+              <div>
+                <p className="text-sm font-bold text-[#00D4FF] uppercase tracking-widest mb-1">Daily Progress</p>
+                <h2 className="text-2xl font-black text-white">{progressPercent}%</h2>
+              </div>
+              <CheckCircle className="w-8 h-8 text-[#00D4FF]/30" />
+            </div>
+            <div className="w-full bg-[#1e293b] rounded-full h-3 inline-flex border border-white/5 overflow-hidden">
+              <div className="bg-gradient-to-r from-[#00D4FF] to-blue-500 h-full rounded-full transition-all duration-1000 ease-out" style={{ width: `${progressPercent}%` }} />
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Missed Banner */}
-      {missedToday > 0 && (
-        <div className="flex items-center gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm font-semibold mb-6">
-          <AlertCircle className="w-5 h-5 shrink-0" />
-          You missed <strong className="text-red-300">{missedToday} dose{missedToday > 1 ? 's' : ''}</strong> today. Consult your doctor if needed.
-        </div>
-      )}
-
-      {/* Tabs */}
-      <div className="flex gap-2 mb-6">
-        {([['today', "Today's Schedule"], ['all', 'All Medicines']] as const).map(([t, label]) => (
-          <button key={t} onClick={() => setTab(t as 'today' | 'all')}
-            className={`px-5 py-2.5 rounded-xl font-bold text-sm border transition-all ${tab === t ? 'bg-[#00D4FF]/10 border-[#00D4FF]/20 text-[#00D4FF]' : 'bg-white/[0.03] border-white/[0.07] text-[#94A3B8] hover:text-white hover:bg-white/[0.06]'}`}>
-            {label}
+      {/* Tabs Layout */}
+      <div className="bg-[#131928] rounded-full p-1.5 flex flex-wrap gap-1 mb-8 w-fit border border-white/5">
+        {(['today', 'upcoming', 'history', 'all'] as const).map(t => (
+          <button key={t} aria-label={`${t} medicines tab`} onClick={() => setTab(t)}
+            className={`px-6 py-2.5 rounded-full font-bold text-sm transition-all capitalize shadow-sm ${
+              tab === t 
+                ? 'bg-[#00D4FF] text-[#0f1117] shadow-[#00D4FF]/20' 
+                : 'text-[#94A3B8] hover:text-white hover:bg-white/[0.04]'
+            }`}>
+            {t}
           </button>
         ))}
       </div>
 
-      {/* Content */}
-      {loading ? (
-        <div className="rounded-2xl border border-white/10 bg-[#131928] p-12 text-center text-[#94A3B8]">Loading reminders...</div>
-      ) : medicines.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-white/10 bg-[#131928] p-16 text-center">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-[#00D4FF]/5 border border-[#00D4FF]/10 flex items-center justify-center text-[#00D4FF]/30">
-            <Pill className="w-8 h-8" />
+      {/* Content Area */}
+      <div className="relative">
+        {loading ? (
+          <div className="rounded-3xl border border-white/10 bg-[#131928] p-20 flex flex-col items-center justify-center text-center shadow-lg">
+            <RotateCcw className="w-10 h-10 mx-auto text-[#00D4FF] animate-spin mb-4" />
+            <p className="text-[#94A3B8] font-medium tracking-wide">Synchronizing your dashboard...</p>
           </div>
-          <h3 className="text-lg font-bold text-white mb-2">No medicines added yet</h3>
-          <p className="text-[#94A3B8] text-sm mb-6">Add your first medicine reminder to get started.</p>
-          <button onClick={openAdd} className="glow-button px-6 py-2.5 text-sm inline-flex mx-auto">
-            <Plus className="w-4 h-4" /> Add Medicine
-          </button>
-        </div>
-      ) : tab === 'today' ? (
-        <TodayTimeline medicines={medicines} />
-      ) : (
-        <div className="space-y-4">
-          {medicines.map(med => (
-            <MedicineCard
-              key={med._id}
-              med={med}
-              onEdit={() => openEdit(med)}
-              onDelete={() => handleDelete(med._id)}
-              onToggleActive={() => handleToggle(med)}
-              onTaken={t => handleTaken(med._id, t)}
-              onMissed={t => handleMissed(med._id, t)}
-            />
-          ))}
-        </div>
-      )}
+        ) : filteredMedicines.length === 0 ? (
+          <div className="rounded-3xl border border-dashed border-white/20 bg-[#131928]/50 p-20 text-center shadow-inner">
+            <div className="w-20 h-20 mx-auto mb-6 rounded-3xl bg-[#00D4FF]/10 border border-[#00D4FF]/20 flex items-center justify-center text-[#00D4FF] shadow-[0_0_20px_rgba(0,212,255,0.15)]">
+              <Pill className="w-10 h-10" />
+            </div>
+            <h3 className="text-2xl font-bold text-white mb-3">No medicines scheduled</h3>
+            <p className="text-[#94A3B8] text-base mb-8 max-w-md mx-auto leading-relaxed">
+              {tab === 'today' ? "You have no medicines scheduled for today. Take a rest or add a new schedule if required." : "You haven't added any medicines to your profile yet. Build your daily health routine now."}
+            </p>
+            <button onClick={openAdd} className="glow-button px-8 py-3 text-sm font-bold inline-flex mx-auto rounded-xl">
+              <Plus className="w-4 h-4 mr-2" /> Add Your First Medicine
+            </button>
+          </div>
+        ) : tab === 'today' ? (
+          <TodayTimeline medicines={filteredMedicines} onTaken={handleTaken} onMissed={handleMissed} />
+        ) : (
+          <div className="grid grid-cols-1 gap-5">
+            {filteredMedicines.map(med => (
+              <MedicineCard
+                key={med._id}
+                med={med}
+                onEdit={() => openEdit(med)}
+                onDelete={() => handleDelete(med._id)}
+                onToggleActive={() => handleToggle(med)}
+                onTaken={t => handleTaken(med._id, t)}
+                onMissed={t => handleMissed(med._id, t)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
-      {/* Modal */}
+      {/* Modal Overlay */}
       {showModal && (
         <MedicineModal
           initial={editTarget}

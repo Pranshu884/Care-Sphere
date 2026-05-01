@@ -49,31 +49,32 @@ router.post('/upload', upload.single('report'), async (req, res) => {
         });
     };
 
-    // Process both Cloudinary upload and AI Analysis concurrently
-    const [uploadResult, aiAnalysis] = await Promise.all([
-      streamUpload(req),
-      analyzeHealthReport(req.file.buffer, req.file.mimetype)
-    ]);
+    // Process Cloudinary upload instantly
+    const uploadResult = await streamUpload(req);
 
     const newReport = new Report({
       userId: req.auth.userId,
       title: title || 'Untitled Report',
-      // Always favor AI category prediction if present, or fallback to user selected/Other
-      category: aiAnalysis?.category || category || 'Other',
+      category: category || 'Other',
       fileUrl: uploadResult.secure_url,
       fileType: req.file.mimetype,
       doctorName: doctorName || '',
       hospitalName: hospitalName || '',
       reportDate: reportDate ? new Date(reportDate) : new Date(),
       notes: notes || '',
-      aiSummary: aiAnalysis?.summary || '',
-      aiAbnormalities: aiAnalysis?.abnormalities || [],
-      aiRecommendations: aiAnalysis?.recommendations || [],
-      healthMetrics: aiAnalysis?.healthMetrics || {},
-      followUpDate: aiAnalysis?.followUpDate ? new Date(aiAnalysis.followUpDate) : undefined,
+      analysisStatus: 'processing',
+      aiSummary: '',
+      aiAbnormalities: [],
+      aiRecommendations: [],
+      healthMetrics: {},
+      parsedBiomarkers: [],
+      auditLog: {}
     });
 
     await newReport.save();
+
+    // Fire and Forget Background Analysis
+    analyzeHealthReport(req.file.buffer, req.file.mimetype, newReport._id).catch(e => console.error("Unhandled background analysis rejection", e));
 
     res.status(201).json({ success: true, report: newReport });
   } catch (error) {
@@ -138,6 +139,47 @@ router.put('/:id/notes', async (req, res) => {
       console.error('Update notes error:', error);
       res.status(500).json({ success: false, message: 'Failed to update notes.' });
    }
+});
+
+// Retry AI Analysis
+router.put('/:id/analyze', async (req, res) => {
+  try {
+    const report = await Report.findById(req.params.id);
+    if (!report) {
+      return res.status(404).json({ success: false, message: 'Report not found' });
+    }
+
+    if (report.userId.toString() !== req.auth.userId) {
+      return res.status(403).json({ success: false, message: 'Unauthorized' });
+    }
+
+    // Set processing status
+    report.analysisStatus = 'processing';
+    await report.save();
+
+    // Return safely and instantly
+    res.status(200).json({ success: true, message: 'Analysis triggered in background.', report });
+
+    // Background retrieval and execution logic inside an async wrap
+    setImmediate(async () => {
+       try {
+          const fileRes = await fetch(report.fileUrl);
+          if (!fileRes.ok) throw new Error('Failed to fetch file from storage');
+          
+          const arrayBuffer = await fileRes.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+          
+          console.log(`[GEMINI START] Triggering manual retry background analysis for report ${report._id}`);
+          await analyzeHealthReport(buffer, report.fileType, report._id);
+       } catch (err) {
+          console.error(`[BACKGROUND RETRY FAIL] Error fetching file for report ${report._id}:`, err);
+       }
+    });
+
+  } catch (error) {
+    console.error('Retry analysis error:', error);
+    res.status(500).json({ success: false, message: 'Analysis retry failed.', error: error.message });
+  }
 });
 
 // We can put emergency profile under auth or user routes usually, but for scoping within Health Hub, letting it sit under user router is better. Since this file is export default router, and mounted on /api/reports, we might want to put emergency profile in a user route or add it to authRoutes instead.

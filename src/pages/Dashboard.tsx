@@ -2,17 +2,50 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Clock, Calendar, Activity, ChevronRight, Star, Plus } from 'lucide-react';
 import { getMe } from '../lib/auth';
+import { apiGet } from '../lib/api';
 
 export default function Dashboard() {
   const [user, setUser] = useState<{ name: string } | null>(null);
+  
+  // Real Data States
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [medicines, setMedicines] = useState<any[]>([]);
+  const [reports, setReports] = useState<any[]>([]);
+  const [stressEntries, setStressEntries] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
-    (async () => {
-      const res = await getMe();
-      if (!mounted) return;
-      if (res.ok) setUser({ name: res.user.name });
-    })();
+    
+    const loadDashboardData = async () => {
+      try {
+        const [meRes, aptRes, medRes, repRes] = await Promise.all([
+          getMe(),
+          apiGet('/api/user/appointments'),
+          apiGet('/api/medicines'),
+          apiGet('/api/reports')
+        ]);
+        
+        if (!mounted) return;
+        
+        if (meRes.ok) setUser({ name: meRes.user.name });
+        if (aptRes.ok && aptRes.data.success) setAppointments(aptRes.data.appointments || []);
+        if (medRes.ok && medRes.data.success) setMedicines(medRes.data.medicines || []);
+        if (repRes.ok && repRes.data.success) setReports(repRes.data.reports || []);
+
+        try {
+          const stressStr = localStorage.getItem('caresphere_stress');
+          if (stressStr) setStressEntries(JSON.parse(stressStr));
+        } catch (e) {}
+      } catch (err) {
+        console.error("Dashboard fetch error:", err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    loadDashboardData();
+
     return () => {
       mounted = false;
     };
@@ -22,8 +55,30 @@ export default function Dashboard() {
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   const dateString = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
-  // Mock data for demonstrating UI state exactly matching image
-  const stats = { appointments: 2, medicines: 3, stress: 0, reports: 3 };
+  // Compute live stats
+  const pendingApts = appointments.filter(a => a.status === 'pending' || a.status === 'accepted');
+  
+  // Actually, backend enriching provides `todayStatus`
+  const activeMedicines = medicines.filter(m => !m.isCompleted); 
+  const todaysMedicines = activeMedicines.slice(0, 3); // Display up to 3 for the dashboard preview 
+
+  // recent stress
+  const recentStress = stressEntries.slice(-1)[0]?.stressLevel || 0;
+
+  const stats = { 
+    appointments: pendingApts.length, 
+    medicines: activeMedicines.length, 
+    stress: recentStress, 
+    reports: reports.length 
+  };
+
+  if (loading) {
+    return (
+      <div className="w-full bg-[#0f1117] min-h-screen flex items-center justify-center">
+        <Activity className="w-8 h-8 animate-spin text-[#1a7fe0]" />
+      </div>
+    );
+  }
 
   return (
     <div className="w-full bg-[#0f1117] min-h-full">
@@ -165,31 +220,33 @@ export default function Dashboard() {
                 <h2 className="text-[13px] font-medium text-[#8b92a5]">Upcoming appointments</h2>
               </div>
               <div className="bg-[#13151e] border border-[#1e2130] rounded-[10px] p-2 flex flex-col">
-                <div className="flex items-center justify-between p-3 rounded-[8px] hover:bg-white/[0.02] transition-colors border border-transparent">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-[6px] bg-[#1a7fe0]/10 flex items-center justify-center text-[#1a7fe0]">
-                      <Calendar className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <p className="text-[14px] font-medium text-white/90">General Checkup</p>
-                      <p className="text-[12px] text-[#8b92a5]">Internal Medicine · Pending approval</p>
-                    </div>
+                {pendingApts.length === 0 ? (
+                  <div className="p-6 text-center">
+                    <p className="text-[13px] text-[#8b92a5] mb-2">No upcoming appointments</p>
                   </div>
-                  <div className="text-[12px] text-[#8b92a5]">Mon, Apr 28</div>
-                </div>
-                
-                <div className="flex items-center justify-between p-3 rounded-[8px] hover:bg-white/[0.02] transition-colors">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-[6px] bg-[#2da65a]/10 flex items-center justify-center text-[#2da65a]">
-                      <Calendar className="w-5 h-5" />
+                ) : (
+                  pendingApts.slice(0, 3).map((apt, idx) => (
+                    <div key={apt._id || idx} className="flex items-center justify-between p-3 rounded-[8px] hover:bg-white/[0.02] transition-colors border border-transparent">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-[6px] bg-[#1a7fe0]/10 flex items-center justify-center text-[#1a7fe0]">
+                          <Calendar className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <p className="text-[14px] font-medium text-white/90">
+                            {apt.doctorId?.name ? `Dr. ${apt.doctorId.name}` : 'Appointment'}
+                          </p>
+                          <p className="text-[12px] text-[#8b92a5]">
+                            {apt.doctorId?.specialization || 'General'} · {apt.status === 'accepted' ? 'Confirmed' : 'Pending approval'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-[12px] text-[#8b92a5]">
+                        {new Date(apt.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}<br/>
+                        <span className="text-[10px] opacity-70">{apt.time}</span>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-[14px] font-medium text-white/90">Dermatology Follow-up</p>
-                      <p className="text-[12px] text-[#8b92a5]">Dermatology · Confirmed</p>
-                    </div>
-                  </div>
-                  <div className="text-[12px] text-[#8b92a5]">May 3</div>
-                </div>
+                  ))
+                )}
 
                 <div className="mt-1 pt-2 pb-1 border-t border-[#1e2130]">
                   <Link to="/appointments" className="text-[13px] text-[#1a7fe0] inline-block w-full text-center hover:bg-[#1a7fe0]/5 rounded-[6px] py-2 transition-colors font-medium">
@@ -207,42 +264,38 @@ export default function Dashboard() {
               </div>
               <div className="bg-[#13151e] border border-[#1e2130] rounded-[10px] p-5 flex flex-col gap-5">
                 
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-1.5 h-1.5 rounded-full bg-[#1a7fe0]" />
-                    <div>
-                      <p className="text-[14px] font-medium text-white/90">Metformin 500mg</p>
-                      <p className="text-[12px] text-[#8b92a5] mt-0.5">8:00 AM · With breakfast</p>
-                    </div>
+                {todaysMedicines.length === 0 ? (
+                  <div className="text-center py-4">
+                    <p className="text-[13px] text-[#8b92a5]">No medications scheduled</p>
                   </div>
-                  <div className="px-3 py-1 rounded-full bg-[#2da65a]/10 text-[#2da65a] text-[11px] font-medium">Taken</div>
-                </div>
-                
-                <div className="w-full h-[1px] bg-[#1e2130]" />
-
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-1.5 h-1.5 rounded-full bg-[#d4860a]" />
-                    <div>
-                      <p className="text-[14px] font-medium text-white/90">Vitamin D3</p>
-                      <p className="text-[12px] text-[#8b92a5] mt-0.5">1:00 PM · After lunch</p>
-                    </div>
-                  </div>
-                  <div className="px-3 py-1 rounded-full bg-[#d4860a]/10 text-[#d4860a] text-[11px] font-medium">Due soon</div>
-                </div>
-
-                <div className="w-full h-[1px] bg-[#1e2130]" />
-
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-1.5 h-1.5 rounded-full bg-[#9b82f5]" />
-                    <div>
-                      <p className="text-[14px] font-medium text-white/90">Omega-3</p>
-                      <p className="text-[12px] text-[#8b92a5] mt-0.5">9:00 PM · After dinner</p>
-                    </div>
-                  </div>
-                  <div className="px-3 py-1 rounded-full bg-white/5 text-[#8b92a5] text-[11px] font-medium">Upcoming</div>
-                </div>
+                ) : (
+                  todaysMedicines.map((med, idx) => {
+                    const times = med.times || [];
+                    const nextTime = med.nextDose || times[0] || '';
+                    
+                    let bgAccent = idx % 3 === 0 ? 'bg-[#1a7fe0]' : idx % 3 === 1 ? 'bg-[#d4860a]' : 'bg-[#9b82f5]';
+                    
+                    return (
+                      <div key={med._id || idx}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <div className={`w-1.5 h-1.5 rounded-full ${bgAccent}`} />
+                            <div>
+                              <p className="text-[14px] font-medium text-white/90">{med.name} {med.dosage}</p>
+                              <p className="text-[12px] text-[#8b92a5] mt-0.5">{nextTime ? `${nextTime} · ` : ''}{med.notes || 'Scheduled'}</p>
+                            </div>
+                          </div>
+                          {med.todayStatus?.taken?.includes(nextTime) ? (
+                            <div className="px-3 py-1 rounded-full bg-[#2da65a]/10 text-[#2da65a] text-[11px] font-medium">Taken</div>
+                          ) : (
+                            <div className="px-3 py-1 rounded-full bg-white/5 text-[#8b92a5] text-[11px] font-medium">Pending</div>
+                          )}
+                        </div>
+                        {idx < todaysMedicines.length - 1 && <div className="w-full h-[1px] bg-[#1e2130] mt-5" />}
+                      </div>
+                    );
+                  })
+                )}
 
               </div>
             </div>

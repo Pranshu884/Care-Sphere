@@ -10,6 +10,12 @@ export type CareUser = {
   isActive?: boolean;
   createdAt?: string | Date;
   updatedAt?: string | Date;
+  dob?: string;
+  city?: string;
+  bloodGroup?: string;
+  height?: number;
+  weight?: number;
+  emergencyContact?: { name: string; phone: string };
 };
 
 export type OtpPurpose = 'register' | 'login' | 'forgot';
@@ -93,8 +99,9 @@ export function logoutUser() {
   clearSessionUser();
   localStorage.removeItem('role');
   localStorage.removeItem('token');
+  localStorage.clear();
   sessionStorage.clear();
-  window.location.href = '/login';
+  window.location.href = '/';
 }
 
 export async function requestRegisterOtp(payload: {
@@ -227,4 +234,86 @@ export async function updateMe(payload: { name: string; email: string }) {
   }
   return { ok: false as const, code: String(data?.code || 'update_failed'), reason: String(data?.message || 'Failed to update profile.') };
 }
+
+export async function updateUserProfile(payload: { phone?: string; dob?: string; gender?: string; city?: string; emergencyContact?: { name: string; phone: string } }) {
+  const base = normalizeApiBase(API_BASE_URL);
+  const token = getToken();
+  if (!token) return { ok: false as const, code: 'no_token', reason: 'Not authenticated.' };
+  const res = await fetch(`${base}/api/user/profile`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (res.ok && data?.success) {
+    return { ok: true as const, user: data.user as CareUser };
+  }
+  return { ok: false as const, code: String(data?.code || 'update_failed'), reason: String(data?.message || 'Failed to update profile.') };
+}
+
+export async function updateHealthSummary(payload: { bloodGroup?: string; height?: number; weight?: number }) {
+  const base = normalizeApiBase(API_BASE_URL);
+  const token = getToken();
+  if (!token) return { ok: false as const, code: 'no_token', reason: 'Not authenticated.' };
+  const res = await fetch(`${base}/api/user/health-summary`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (res.ok && data?.success) {
+    return { ok: true as const, user: data.user as CareUser };
+  }
+  return { ok: false as const, code: String(data?.code || 'update_failed'), reason: String(data?.message || 'Failed to update health summary.') };
+}
+
+export async function deleteAccount() {
+  const base = normalizeApiBase(API_BASE_URL);
+  const token = getToken();
+  if (!token) return { ok: false as const, code: 'no_token', reason: 'Not authenticated.' };
+  const res = await fetch(`${base}/api/user/account`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (res.ok && data?.success) {
+    return { ok: true as const };
+  }
+  return { ok: false as const, reason: String(data?.message || 'Failed to delete account.') };
+}
+
+export async function changePassword(payload: { currentPassword: string; newPassword: string }) {
+  const base = normalizeApiBase(API_BASE_URL);
+  const token = getToken();
+  if (!token) return { ok: false as const, code: 'no_token', reason: 'Not authenticated.' };
+  const res = await fetch(`${base}/api/auth/change-password`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (res.ok && data?.success) {
+    return { ok: true as const };
+  }
+  return { ok: false as const, reason: String(data?.message || 'Failed to change password.') };
+}
+
+export async function verifyCurrentPassword(currentPassword: string) {
+  const base = normalizeApiBase(API_BASE_URL);
+  const token = getToken();
+  if (!token) return { ok: false as const, reason: 'Not authenticated.' };
+  try {
+    const res = await fetch(`${base}/api/auth/verify-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ currentPassword }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data?.success) return { ok: true as const };
+    return { ok: false as const, reason: String(data?.message || 'Incorrect password.') };
+  } catch {
+    return { ok: false as const, reason: 'Network error. Check your connection.' };
+  }
+}
+
 

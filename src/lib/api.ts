@@ -6,7 +6,12 @@ function normalizeApiBase(url: string) {
 }
 
 function getHeaders() {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const headers: Record<string, string> = { 
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0'
+  };
   const token = localStorage.getItem('caresphere_token');
   if (token) headers.Authorization = `Bearer ${token}`;
   return headers;

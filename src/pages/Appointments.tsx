@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Calendar, Clock, X, Activity, User, MapPin, Stethoscope, Award, Search, Building, ChevronRight } from 'lucide-react';
 import { apiGet, apiPost, apiDelete } from '../lib/api';
+import Select from '../components/ui/Select';
 
 const CATEGORIES = ['All', 'General Physician', 'Gynecologist', 'Dermatologist', 'Pediatrician', 'Neurologist', 'Gastroenterologist', 'Orthopedic'];
 const CITIES = ['All Cities', 'Ahmedabad', 'Surat', 'Rajkot', 'Vadodara', 'Nadiad'];
@@ -127,13 +128,14 @@ export default function Appointments() {
               ))}
             </div>
 
-            <select
-              value={selectedCity}
-              onChange={e => setSelectedCity(e.target.value)}
-              className="premium-input py-2 text-sm min-w-[160px] [&>option]:text-slate-900"
-            >
-              {CITIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+            <div className="min-w-[160px] z-40">
+              <Select
+                value={selectedCity}
+                onChange={val => setSelectedCity(val)}
+                options={CITIES.map(c => ({ value: c, label: c }))}
+                className="w-full"
+              />
+            </div>
           </div>
 
           {/* Doctor Cards */}

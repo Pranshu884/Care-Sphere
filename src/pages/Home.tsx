@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { getMe, logoutUser } from '../lib/auth';
 import {
   Stethoscope, Calendar, Pill, FileText,
@@ -134,6 +134,7 @@ function MockDashboard() {
 /* ─── Main Component ────────────────────────────────────── */
 export default function Home() {
   const navigate = useNavigate();
+  const [verifying, setVerifying] = useState(!!localStorage.getItem('caresphere_token'));
 
   useEffect(() => {
     const token = localStorage.getItem('caresphere_token');
@@ -141,15 +142,26 @@ export default function Home() {
       getMe().then(res => {
         if (res.ok) {
           const role = localStorage.getItem('role') || 'user';
-          if (role === 'admin') navigate('/admin/dashboard');
-          else if (role === 'doctor') navigate('/doctor/dashboard');
-          else navigate('/dashboard');
+          if (role === 'admin') navigate('/admin/dashboard', { replace: true });
+          else if (role === 'doctor') navigate('/doctor/dashboard', { replace: true });
+          else navigate('/dashboard', { replace: true });
         } else {
+          setVerifying(false);
           logoutUser();
         }
       });
+    } else {
+      setVerifying(false);
     }
   }, [navigate]);
+
+  if (verifying) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Activity className="w-10 h-10 text-primary animate-bounce" />
+      </div>
+    );
+  }
 
   return (
     <div className="overflow-x-hidden">

@@ -13,11 +13,32 @@ const ReportSchema = new mongoose.Schema(
     notes: { type: String, default: '' },
 
     // AI Intelligence Fields
-    aiSummary: { type: String, default: '' },
-    aiAbnormalities: { type: [String], default: [] },
-    aiRecommendations: { type: [String], default: [] },
+    analysisStatus: {
+    type: String,
+    enum: ['processing', 'completed', 'partial_analysis', 'failed', 'retry_pending'],
+    default: 'processing'
+  },
+  aiSummary: { type: String, default: '' },
+  aiAbnormalities: { type: [String], default: [] },
+  aiRecommendations: { type: [String], default: [] },
     healthMetrics: { type: Map, of: String, default: {} },
-    followUpDate: { type: Date }
+    followUpSuggestion: { type: String, default: '' },
+
+    // Audit & Structured Parsing
+    auditLog: {
+       extractionTimestamp: { type: Date },
+       aiModelVersion: { type: String, default: '' },
+       validatedKeys: { type: [String], default: [] },
+       sourceReportType: { type: String, default: '' }
+    },
+    parsedBiomarkers: [{
+       biomarkerName: String,
+       normalizedKey: String,
+       value: Number,
+       unit: String,
+       status: String, 
+       referenceRange: String
+    }]
   },
   { timestamps: true }
 );

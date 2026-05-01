@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Activity, Mail, ShieldCheck } from 'lucide-react';
+import { Activity, Mail, ShieldCheck, Eye, EyeOff } from 'lucide-react';
 import {
   requestRegisterOtp,
   resendOtp,
@@ -10,6 +10,7 @@ import {
   getMe,
   logoutUser
 } from '../lib/auth';
+import Select from '../components/ui/Select';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -30,6 +31,8 @@ export default function Register() {
   const [verifyLoading, setVerifyLoading] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const cooldownIntervalRef = useRef<number | null>(null);
 
   const canVerify = useMemo(() => otpInput.trim().length >= 4 && otpInput.trim().length <= 6, [otpInput]);
@@ -249,44 +252,64 @@ export default function Register() {
 
                 <div>
                   <label htmlFor="gender" className="block text-sm font-medium text-muted mb-1.5">Gender</label>
-                  <select
-                    id="gender"
+                  <Select
                     value={form.gender}
-                    onChange={(e) => setForm({ ...form, gender: e.target.value as typeof form.gender })}
-                    className="premium-input [&>option]:text-slate-900"
-                  >
-                    <option value="male">Male</option>
-                    <option value="female">Female</option>
-                    <option value="other">Other</option>
-                    <option value="prefer-not">Prefer not to say</option>
-                  </select>
+                    onChange={(val) => setForm({ ...form, gender: val as typeof form.gender })}
+                    options={[
+                      { value: 'male', label: 'Male' },
+                      { value: 'female', label: 'Female' },
+                      { value: 'other', label: 'Other' },
+                      { value: 'prefer-not', label: 'Prefer not to say' }
+                    ]}
+                    className="w-full"
+                  />
                 </div>
               </div>
 
               <div>
                 <label htmlFor="password" className="block text-sm font-medium text-muted mb-1.5">Password</label>
-                <input
-                  id="password"
-                  type="password"
-                  required
-                  value={form.password}
-                  onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  className="premium-input"
-                  placeholder="At least 6 characters"
-                />
+                <div className="relative">
+                  <input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    required
+                    value={form.password}
+                    onChange={(e) => setForm({ ...form, password: e.target.value })}
+                    className="premium-input pr-10"
+                    placeholder="At least 6 characters"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(prev => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200 transition-colors"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
               </div>
 
               <div>
                 <label htmlFor="confirmPassword" className="block text-sm font-medium text-muted mb-1.5">Confirm password</label>
-                <input
-                  id="confirmPassword"
-                  type="password"
-                  required
-                  value={form.confirmPassword}
-                  onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
-                  className="premium-input"
-                  placeholder="Match password"
-                />
+                <div className="relative">
+                  <input
+                    id="confirmPassword"
+                    type={showConfirmPassword ? "text" : "password"}
+                    required
+                    value={form.confirmPassword}
+                    onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
+                    className="premium-input pr-10"
+                    placeholder="Match password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(prev => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200 transition-colors"
+                    aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
               </div>
 
               <button
